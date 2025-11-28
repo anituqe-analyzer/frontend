@@ -29,7 +29,7 @@ import {
   MessageSquare,
   Send,
   User,
-  ShieldCheck
+  ShieldCheck,
 } from "lucide-react";
 
 export function AuctionDetails() {
@@ -41,16 +41,18 @@ export function AuctionDetails() {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [newComment, setNewComment] = useState("");
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
-  const [votingState, setVotingState] = useState<"authentic" | "fake" | null>(null);
+  const [votingState, setVotingState] = useState<"authentic" | "fake" | null>(
+    null
+  );
 
   useEffect(() => {
     if (id) {
       setLoading(true);
       const auctionId = parseInt(id);
-      
+
       Promise.all([
         mockApi.getAuctionById(auctionId),
-        mockApi.getComments(auctionId)
+        mockApi.getComments(auctionId),
       ])
         .then(([auctionData, commentsData]) => {
           setAuction(auctionData || null);
@@ -62,13 +64,17 @@ export function AuctionDetails() {
 
   const handleAddComment = async () => {
     if (!auction || !newComment.trim()) return;
-    
+
     setIsSubmittingComment(true);
     try {
       // Randomly assign expert status for demo purposes (50% chance)
       const isExpert = Math.random() > 0.5;
-      const comment = await mockApi.addComment(auction.id, newComment, isExpert);
-      setComments(prev => [comment, ...prev]);
+      const comment = await mockApi.addComment(
+        auction.id,
+        newComment,
+        isExpert
+      );
+      setComments((prev) => [comment, ...prev]);
       setNewComment("");
     } catch (error) {
       console.error("Failed to add comment", error);
@@ -79,15 +85,19 @@ export function AuctionDetails() {
 
   const handleVote = async (type: "authentic" | "fake") => {
     if (!auction || votingState) return; // Prevent multiple votes in this demo
-    
+
     try {
       const newCounts = await mockApi.voteAuction(auction.id, type);
-      setAuction(prev => prev ? {
-        ...prev,
-        votes_authentic: newCounts.authentic,
-        votes_fake: newCounts.fake,
-        votes: newCounts.authentic - newCounts.fake // Update net score
-      } : null);
+      setAuction((prev) =>
+        prev
+          ? {
+              ...prev,
+              votes_authentic: newCounts.authentic,
+              votes_fake: newCounts.fake,
+              votes: newCounts.authentic - newCounts.fake, // Update net score
+            }
+          : null
+      );
       setVotingState(type);
     } catch (error) {
       console.error("Failed to vote", error);
@@ -283,7 +293,8 @@ export function AuctionDetails() {
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" /> Komentarze ({comments.length})
+                <MessageSquare className="h-5 w-5" /> Komentarze (
+                {comments.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -293,19 +304,21 @@ export function AuctionDetails() {
                   <AvatarFallback>TY</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 space-y-2">
-                  <Textarea 
-                    placeholder="Dodaj komentarz..." 
+                  <Textarea
+                    placeholder="Dodaj komentarz..."
                     value={newComment}
                     onChange={(e) => setNewComment(e.target.value)}
                     className="min-h-[80px]"
                   />
                   <div className="flex justify-end">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       onClick={handleAddComment}
                       disabled={!newComment.trim() || isSubmittingComment}
                     >
-                      {isSubmittingComment ? "Wysyłanie..." : (
+                      {isSubmittingComment ? (
+                        "Wysyłanie..."
+                      ) : (
                         <>
                           <Send className="mr-2 h-3 w-3" /> Wyślij
                         </>
@@ -320,7 +333,9 @@ export function AuctionDetails() {
               {/* Comments List */}
               <div className="space-y-6">
                 {comments.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">Brak komentarzy. Bądź pierwszy!</p>
+                  <p className="text-center text-muted-foreground py-4">
+                    Brak komentarzy. Bądź pierwszy!
+                  </p>
                 ) : (
                   comments.map((comment) => (
                     <div key={comment.id} className="flex gap-4">
@@ -332,14 +347,23 @@ export function AuctionDetails() {
                       </Avatar>
                       <div className="flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm">{comment.user_name}</span>
+                          <span className="font-semibold text-sm">
+                            {comment.user_name}
+                          </span>
                           {comment.is_expert && (
-                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200 text-[10px] px-1.5 py-0 h-5">
+                            <Badge
+                              variant="secondary"
+                              className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200 text-[10px] px-1.5 py-0 h-5"
+                            >
                               <ShieldCheck className="mr-1 h-3 w-3" /> Ekspert
                             </Badge>
                           )}
                           <span className="text-xs text-muted-foreground ml-auto">
-                            {new Date(comment.created_at).toLocaleDateString()} {new Date(comment.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            {new Date(comment.created_at).toLocaleDateString()}{" "}
+                            {new Date(comment.created_at).toLocaleTimeString(
+                              [],
+                              { hour: "2-digit", minute: "2-digit" }
+                            )}
                           </span>
                         </div>
                         <p className="text-sm text-muted-foreground leading-relaxed">
@@ -379,44 +403,52 @@ export function AuctionDetails() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-3">
-                <Button 
-                  variant={votingState === "authentic" ? "default" : "outline"} 
+                <Button
+                  variant={votingState === "authentic" ? "default" : "outline"}
                   className={cn(
-                    "flex-1 gap-2", 
-                    votingState === "authentic" ? "bg-green-600 hover:bg-green-700" : "hover:border-green-500 hover:text-green-600"
+                    "flex-1 gap-2",
+                    votingState === "authentic"
+                      ? "bg-green-600 hover:bg-green-700"
+                      : "hover:border-green-500 hover:text-green-600"
                   )}
                   onClick={() => handleVote("authentic")}
                   disabled={!!votingState}
                 >
-                  <ThumbsUp className="h-4 w-4" /> 
+                  <ThumbsUp className="h-4 w-4" />
                   Oryginał ({auction.votes_authentic})
                 </Button>
-                <Button 
+                <Button
                   variant={votingState === "fake" ? "default" : "outline"}
                   className={cn(
                     "flex-1 gap-2",
-                    votingState === "fake" ? "bg-red-600 hover:bg-red-700" : "hover:border-red-500 hover:text-red-600"
+                    votingState === "fake"
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "hover:border-red-500 hover:text-red-600"
                   )}
                   onClick={() => handleVote("fake")}
                   disabled={!!votingState}
                 >
-                  <ThumbsDown className="h-4 w-4" /> 
+                  <ThumbsDown className="h-4 w-4" />
                   Falsyfikat ({auction.votes_fake})
                 </Button>
               </div>
-              
+
               {/* Voting Progress Bar */}
-              {(auction.votes_authentic + auction.votes_fake) > 0 && (
+              {auction.votes_authentic + auction.votes_fake > 0 && (
                 <div className="space-y-1">
                   <div className="flex justify-between text-xs text-muted-foreground">
                     <span>Oryginał</span>
                     <span>Falsyfikat</span>
                   </div>
                   <div className="h-2 w-full bg-red-100 rounded-full overflow-hidden flex">
-                    <div 
+                    <div
                       className="h-full bg-green-500 transition-all duration-500"
-                      style={{ 
-                        width: `${(auction.votes_authentic / (auction.votes_authentic + auction.votes_fake)) * 100}%` 
+                      style={{
+                        width: `${
+                          (auction.votes_authentic /
+                            (auction.votes_authentic + auction.votes_fake)) *
+                          100
+                        }%`,
                       }}
                     />
                     <div className="h-full bg-red-500 flex-1" />
