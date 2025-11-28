@@ -32,9 +32,6 @@ export function Navbar() {
           <Button variant="ghost" size="sm" className="hidden md:inline-flex">
             O projekcie
           </Button>
-          <Button variant="ghost" size="sm" className="hidden md:inline-flex">
-            Eksperci
-          </Button>
           <div className="ml-2">
             <AuthModal />
           </div>

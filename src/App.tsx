@@ -3,6 +3,8 @@ import { Navbar } from "./components/Navbar";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
 import { ExpertTaskDetails } from "./pages/ExpertTaskDetails";
+import { AddAuction } from "./pages/AddAuction";
+import { AuctionDetails } from "./pages/AuctionDetails";
 
 function App() {
   return (
@@ -14,6 +16,8 @@ function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/add-auction" element={<AddAuction />} />
+            <Route path="/auction/:id" element={<AuctionDetails />} />
             <Route path="/expert/task/:id" element={<ExpertTaskDetails />} />
           </Routes>
         </main>

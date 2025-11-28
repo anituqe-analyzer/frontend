@@ -1,8 +1,25 @@
 import { Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export function Hero() {
+  const [url, setUrl] = useState("");
+  const navigate = useNavigate();
+
+  const handleAnalyze = () => {
+    if (url.trim()) {
+      navigate(`/add-auction?url=${encodeURIComponent(url)}`);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      handleAnalyze();
+    }
+  };
+
   return (
     <div className="relative overflow-hidden">
       {/* Background elements */}
@@ -34,10 +51,14 @@ export function Hero() {
             type="text"
             placeholder="Wklej link do oferty (np. Allegro, OLX, eBay)..."
             className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-lg bg-transparent h-12"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            onKeyDown={handleKeyDown}
           />
           <Button
             size="lg"
             className="px-8 h-12 rounded-lg text-base shadow-md transition-transform active:scale-95 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
+            onClick={handleAnalyze}
           >
             Analizuj
           </Button>
