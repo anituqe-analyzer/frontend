@@ -1,10 +1,10 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import { Navbar } from "./components/Navbar";
-import { Home } from "./pages/Home";
-import { Dashboard } from "./pages/Dashboard";
-import { ExpertTaskDetails } from "./pages/ExpertTaskDetails";
-import { AddAuction } from "./pages/AddAuction";
-import { AuctionDetails } from "./pages/AuctionDetails";
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { Navbar } from './components/Navbar';
+import { Home } from './pages/Home';
+import { Dashboard } from './pages/Dashboard';
+import { ExpertTaskDetails } from './pages/ExpertTaskDetails';
+import { AddAuction } from './pages/AddAuction';
+import { AuctionDetails } from './pages/AuctionDetails';
 
 function App() {
   return (

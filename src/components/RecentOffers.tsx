@@ -1,17 +1,11 @@
-import { useState, useEffect, use, Suspense, useMemo } from "react";
-import { Link } from "react-router-dom";
-import { Badge } from "./ui/badge";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "./ui/card";
-import { Separator } from "./ui/separator";
-import { Progress } from "./ui/progress";
+import { useState, useEffect, use, Suspense, useMemo } from 'react';
+import { Link } from 'react-router-dom';
+import { Badge } from './ui/badge';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from './ui/card';
+import { Separator } from './ui/separator';
+import { Progress } from './ui/progress';
 import {
   Clock,
   ThumbsUp,
@@ -21,13 +15,18 @@ import {
   ShieldCheck,
   ShieldQuestion,
   Search,
-} from "lucide-react";
-import { mockApi, type Auction, type Category } from "@/services/mockApi";
+} from 'lucide-react';
+import { api, type Auction, type Category } from '@/services/api';
+
+const VERIFIED_STATUSES = new Set([ 'expert_verified', 'ai_verified', 'ai_verified_authentic', 'community_verified' ]);
+const FAKE_STATUSES = new Set([ 'fake', 'ai_verified_fake', 'rejected' ]);
+const PENDING_STATUSES = new Set([ 'pending', 'pending_ai', 'needs_human_verification', 'disputed' ]);
 
 const getScoreLabel = (score: number) => {
-  if (score >= 80) return "Wysokie prawdopodobieństwo";
-  if (score >= 50) return "Niejednoznaczny";
-  return "Wysokie ryzyko";
+  if (score >= 80) return 'Wysokie prawdopodobieństwo';
+  if (score >= 50) return 'Niejednoznaczny';
+
+  return 'Wysokie ryzyko';
 };
 
 function CategoryList({
@@ -39,12 +38,13 @@ function CategoryList({
   selectedCategory: number | null;
   onSelectCategory: (id: number | null) => void;
 }) {
-  const categories = use(categoriesPromise);
+  const categoriesData = use(categoriesPromise);
+  const categories = Array.isArray(categoriesData) ? categoriesData : [];
 
   return (
     <div className="flex flex-wrap gap-2 mb-8">
       <Button
-        variant={selectedCategory === null ? "default" : "outline"}
+        variant={selectedCategory === null ? 'default' : 'outline'}
         size="sm"
         onClick={() => onSelectCategory(null)}
         className="rounded-full"
@@ -54,7 +54,7 @@ function CategoryList({
       {categories.map((category) => (
         <Button
           key={category.id}
-          variant={selectedCategory === category.id ? "default" : "outline"}
+          variant={selectedCategory === category.id ? 'default' : 'outline'}
           size="sm"
           onClick={() => onSelectCategory(category.id)}
           className="rounded-full"
@@ -66,37 +66,25 @@ function CategoryList({
   );
 }
 
-function AuctionGrid({
-  auctionsPromise,
-}: {
-  auctionsPromise: Promise<Auction[]>;
-}) {
+function AuctionGrid({ auctionsPromise }: { auctionsPromise: Promise<Auction[]> }) {
   const auctions = use(auctionsPromise);
 
   if (auctions.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        Nie znaleziono ofert spełniających kryteria.
-      </div>
-    );
+    return <div className="text-center py-12 text-muted-foreground">Nie znaleziono ofert spełniających kryteria.</div>;
   }
 
   return (
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
       {auctions.map((offer) => {
-        const score = offer.ai_score_authenticity
-          ? Math.round(offer.ai_score_authenticity * 100)
-          : 0;
-        const isVerified =
-          offer.verification_status === "expert_verified" ||
-          offer.verification_status === "ai_verified_authentic" ||
-          offer.verification_status === "community_verified";
-        const isFake =
-          offer.verification_status === "ai_verified_fake" ||
-          offer.verification_status === "rejected";
-        const isPending =
-          offer.verification_status === "pending_ai" ||
-          offer.verification_status === "needs_human_verification";
+        const score = offer.ai_score_authenticity != null ? Math.round(offer.ai_score_authenticity * 100) : 0;
+        const status = offer.verification_status ?? 'pending';
+        const isVerified = VERIFIED_STATUSES.has(status);
+        const isFake = FAKE_STATUSES.has(status);
+        const isPending = PENDING_STATUSES.has(status);
+        const imageSrc = offer.image ?? `https://source.unsplash.com/random/600x600?antiques&sig=${offer.id}`;
+        const platformLabel = offer.platform ?? 'Nieznane źródło';
+        const netVotes =
+          typeof offer.votes === 'number' ? offer.votes : (offer.votes_authentic ?? 0) - (offer.votes_fake ?? 0);
 
         return (
           <Card
@@ -106,7 +94,7 @@ function AuctionGrid({
             <div className="aspect-square relative overflow-hidden bg-muted">
               <Link to={`/auction/${offer.id}`} className="block h-full w-full">
                 <img
-                  src={offer.image}
+                  src={imageSrc}
                   alt={offer.title}
                   className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
                 />
@@ -119,10 +107,7 @@ function AuctionGrid({
                   </Badge>
                 )}
                 {isFake && (
-                  <Badge
-                    variant="destructive"
-                    className="opacity-90 backdrop-blur-sm shadow-sm"
-                  >
+                  <Badge variant="destructive" className="opacity-90 backdrop-blur-sm shadow-sm">
                     <AlertTriangle className="mr-1 h-3 w-3" /> Falsyfikat
                   </Badge>
                 )}
@@ -139,14 +124,14 @@ function AuctionGrid({
             <CardHeader className="p-4 pb-2">
               <div className="flex justify-between items-start mb-2">
                 <Badge variant="outline" className="text-xs font-normal">
-                  {offer.platform}
+                  {offer.category_name ?? platformLabel}
                 </Badge>
               </div>
               <Link to={`/auction/${offer.id}`} className="hover:underline">
-                <CardTitle className="line-clamp-2 text-base mb-2">
-                  {offer.title}
-                </CardTitle>
+                <CardTitle className="line-clamp-2 text-base mb-2">{offer.title}</CardTitle>
               </Link>
+
+              <p className="text-xs text-muted-foreground">Sprzedający: {offer.submitted_by_username ?? 'nieznany'}</p>
 
               <div className="space-y-1.5 mt-2">
                 <div className="flex justify-between items-center text-xs">
@@ -162,11 +147,7 @@ function AuctionGrid({
                   </span>
                   <span
                     className={`font-bold ${
-                      score >= 80
-                        ? "text-green-600"
-                        : score >= 50
-                        ? "text-yellow-600"
-                        : "text-red-600"
+                      score >= 80 ? 'text-green-600' : score >= 50 ? 'text-yellow-600' : 'text-red-600'
                     }`}
                   >
                     {score}%
@@ -177,33 +158,25 @@ function AuctionGrid({
                   className="h-2 bg-muted"
                   style={
                     {
-                      "--primary":
-                        score >= 80
-                          ? "142.1 76.2% 36.3%"
-                          : score >= 50
-                          ? "45.4 93.4% 47.5%"
-                          : "0 84.2% 60.2%",
+                      '--primary':
+                        score >= 80 ? '142.1 76.2% 36.3%' : score >= 50 ? '45.4 93.4% 47.5%' : '0 84.2% 60.2%',
                     } as React.CSSProperties
                   }
                 />
-                <p className="text-[10px] text-muted-foreground text-right">
-                  {getScoreLabel(score)}
-                </p>
+                <p className="text-[10px] text-muted-foreground text-right">{getScoreLabel(score)}</p>
               </div>
             </CardHeader>
             <CardContent className="p-4 pt-0 text-sm text-muted-foreground">
               <div className="flex items-center gap-1 mt-2">
                 <Clock className="h-3 w-3" />
-                <span>Koniec za: {offer.timeLeft}</span>
+                <span>Dodano: {new Date(offer.created_at).toLocaleDateString()}</span>
               </div>
             </CardContent>
             <Separator />
             <CardFooter className="p-3 bg-muted/20 flex justify-between items-center">
               <div className="flex items-center gap-1 text-sm font-medium">
                 <ThumbsUp className="h-4 w-4 text-primary" />
-                <span>
-                  {offer.votes > 0 ? `+${offer.votes}` : offer.votes} głosów
-                </span>
+                <span>{netVotes > 0 ? `+${netVotes}` : netVotes} głosów</span>
               </div>
               <Button variant="ghost" size="sm" className="h-8 text-xs" asChild>
                 <Link to={`/auction/${offer.id}`}>Szczegóły</Link>
@@ -217,32 +190,31 @@ function AuctionGrid({
 }
 
 export function RecentOffers() {
-  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [ selectedCategory, setSelectedCategory ] = useState<number | null>(null);
+  const [ searchTerm, setSearchTerm ] = useState('');
+  const [ debouncedSearchTerm, setDebouncedSearchTerm ] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
     }, 300);
-    return () => clearTimeout(timer);
-  }, [searchTerm]);
 
-  const categoriesPromise = useMemo(() => mockApi.getCategories(), []);
+    return () => clearTimeout(timer);
+  }, [ searchTerm ]);
+
+  const categoriesPromise = useMemo(() => api.getCategories(), []);
 
   const auctionsPromise = useMemo(() => {
-    return mockApi.getAuctions({
+    return api.getAuctions({
       categoryId: selectedCategory || undefined,
       search: debouncedSearchTerm,
     });
-  }, [selectedCategory, debouncedSearchTerm]);
+  }, [ selectedCategory, debouncedSearchTerm ]);
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <h2 className="text-2xl font-bold tracking-tight">
-          Ostatnio sprawdzane oferty
-        </h2>
+        <h2 className="text-2xl font-bold tracking-tight">Ostatnio sprawdzane oferty</h2>
 
         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
           <div className="relative w-full sm:w-64">
@@ -258,11 +230,7 @@ export function RecentOffers() {
         </div>
       </div>
 
-      <Suspense
-        fallback={
-          <div className="h-10 w-full animate-pulse bg-muted/20 rounded-full mb-8" />
-        }
-      >
+      <Suspense fallback={<div className="h-10 w-full animate-pulse bg-muted/20 rounded-full mb-8" />}>
         <CategoryList
           categoriesPromise={categoriesPromise}
           selectedCategory={selectedCategory}
@@ -273,7 +241,7 @@ export function RecentOffers() {
       <Suspense
         fallback={
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-            {[...Array(4)].map((_, i) => (
+            {[ ...Array(4) ].map((_, i) => (
               <Card key={i} className="h-[400px] animate-pulse bg-muted/20" />
             ))}
           </div>

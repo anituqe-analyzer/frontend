@@ -1,11 +1,11 @@
-import { Search } from "lucide-react";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Search } from 'lucide-react';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 export function Hero() {
-  const [url, setUrl] = useState("");
+  const [ url, setUrl ] = useState('');
   const navigate = useNavigate();
 
   const handleAnalyze = () => {
@@ -15,7 +15,7 @@ export function Hero() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
+    if (e.key === 'Enter') {
       handleAnalyze();
     }
   };
@@ -35,14 +35,14 @@ export function Hero() {
           Nowość: Weryfikacja AI 2.0
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-6xl mb-6 bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
-          Sprawdź autentyczność{" "}
+          Sprawdź autentyczność{' '}
           <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
             antyku
           </span>
         </h1>
         <p className="mb-10 max-w-[800px] text-muted-foreground md:text-xl leading-relaxed">
-          Wklej link do aukcji lub oferty, a nasza sztuczna inteligencja
-          wstępnie oceni przedmiot. W razie wątpliwości pomogą nasi eksperci.
+          Wklej link do aukcji lub oferty, a nasza sztuczna inteligencja wstępnie oceni przedmiot. W razie wątpliwości
+          pomogą nasi eksperci.
         </p>
 
         <div className="flex w-full max-w-4xl items-center space-x-2 rounded-xl border border-border/50 bg-background/60 backdrop-blur-xl p-2 shadow-2xl ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2 transition-all hover:border-primary/50 hover:bg-background/80">

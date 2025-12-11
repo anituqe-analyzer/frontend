@@ -1,5 +1,5 @@
-import { Hero } from "@/components/Hero";
-import { RecentOffers } from "@/components/RecentOffers";
+import { Hero } from '@/components/Hero';
+import { RecentOffers } from '@/components/RecentOffers';
 
 export function Home() {
   return (

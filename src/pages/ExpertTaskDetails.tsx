@@ -1,14 +1,14 @@
-import { useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { Progress } from "@/components/ui/progress";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { ImageMagnifier } from "@/components/ui/image-magnifier";
-import { cn } from "@/lib/utils";
+import { useState } from 'react';
+import { useParams, Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { Progress } from '@/components/ui/progress';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
+import { ImageMagnifier } from '@/components/ui/image-magnifier';
+import { cn } from '@/lib/utils';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -24,63 +24,63 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-} from "lucide-react";
+} from 'lucide-react';
 
 // Mock data for a specific task
 const TASK_DETAILS = {
   id: 101,
-  title: "Szabla wz. 21 - weryfikacja sygnatury",
+  title: 'Szabla wz. 21 - weryfikacja sygnatury',
   description:
-    "Proszę o weryfikację autentyczności szabli wz. 21. Sprzedający twierdzi, że to oryginał z 1925 roku, ale mam wątpliwości co do sygnatury na głowni. Załączam zdjęcia detali.",
+    'Proszę o weryfikację autentyczności szabli wz. 21. Sprzedający twierdzi, że to oryginał z 1925 roku, ale mam wątpliwości co do sygnatury na głowni. Załączam zdjęcia detali.',
   images: [
-    "https://images.unsplash.com/photo-1590845947698-8924d7409b56?w=1200&auto=format&fit=crop&q=80",
-    "https://images.unsplash.com/photo-1615655406736-b37c4fabf923?w=800&auto=format&fit=crop&q=60",
-    "https://images.unsplash.com/photo-1589118949245-7d38baf380d6?w=800&auto=format&fit=crop&q=60",
+    'https://images.unsplash.com/photo-1590845947698-8924d7409b56?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?w=800&auto=format&fit=crop&q=60',
+    'https://images.unsplash.com/photo-1589118949245-7d38baf380d6?w=800&auto=format&fit=crop&q=60',
   ],
   user: {
-    name: "Jan Kowalski",
-    username: "jan_kowalski",
-    avatar: "JK",
-    reputation: "Początkujący",
+    name: 'Jan Kowalski',
+    username: 'jan_kowalski',
+    avatar: 'JK',
+    reputation: 'Początkujący',
   },
-  date: "2025-11-20",
-  platform: "Allegro",
-  url: "https://allegro.pl/oferta/przykladowa-szabla",
+  date: '2025-11-20',
+  platform: 'Allegro',
+  url: 'https://allegro.pl/oferta/przykladowa-szabla',
   aiAnalysis: {
     score: 45,
-    confidence: "Niska",
+    confidence: 'Niska',
     flags: [
       {
-        type: "warning",
-        message: "Nietypowy kształt sygnatury dla tego rocznika",
+        type: 'warning',
+        message: 'Nietypowy kształt sygnatury dla tego rocznika',
       },
-      { type: "success", message: "Materiały zgodne z epoką" },
+      { type: 'success', message: 'Materiały zgodne z epoką' },
       {
-        type: "danger",
-        message: "Podejrzana patyna (możliwe postarzanie chemiczne)",
+        type: 'danger',
+        message: 'Podejrzana patyna (możliwe postarzanie chemiczne)',
       },
     ],
   },
   history: [
     {
-      user: "System AI",
-      action: "Wstępna analiza",
-      date: "2025-11-20 14:30",
-      comment: "Wykryto nieścisłości w sygnaturze.",
+      user: 'System AI',
+      action: 'Wstępna analiza',
+      date: '2025-11-20 14:30',
+      comment: 'Wykryto nieścisłości w sygnaturze.',
     },
     {
-      user: "Marek Nowak (Ekspert)",
-      action: "Komentarz",
-      date: "2025-11-20 16:15",
-      comment: "Potrzebuję lepszego zdjęcia rękojeści od spodu.",
+      user: 'Marek Nowak (Ekspert)',
+      action: 'Komentarz',
+      date: '2025-11-20 16:15',
+      comment: 'Potrzebuję lepszego zdjęcia rękojeści od spodu.',
     },
   ],
 };
 
 export function ExpertTaskDetails() {
   const { id } = useParams();
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [ selectedImageIndex, setSelectedImageIndex ] = useState(0);
+  const [ isLightboxOpen, setIsLightboxOpen ] = useState(false);
 
   // In a real app, we would fetch data based on ID
   const task = TASK_DETAILS;
@@ -100,9 +100,7 @@ export function ExpertTaskDetails() {
         <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-3xl font-bold tracking-tight">
-                {task.title}
-              </h1>
+              <h1 className="text-3xl font-bold tracking-tight">{task.title}</h1>
               <Badge variant="outline" className="text-sm">
                 ID: {id}
               </Badge>
@@ -121,8 +119,7 @@ export function ExpertTaskDetails() {
                 rel="noreferrer"
                 className="flex items-center gap-1 text-primary hover:underline"
               >
-                <ExternalLink className="h-4 w-4" /> Link do oferty (
-                {task.platform})
+                <ExternalLink className="h-4 w-4" /> Link do oferty ({task.platform})
               </a>
             </div>
           </div>
@@ -146,10 +143,7 @@ export function ExpertTaskDetails() {
         <div className="lg:col-span-2 space-y-6">
           <Card className="overflow-hidden border-muted/60 shadow-sm">
             <div className="relative aspect-video bg-muted flex items-center justify-center">
-              <ImageMagnifier
-                src={task.images[selectedImageIndex]}
-                alt="Main view"
-              />
+              <ImageMagnifier src={task.images[selectedImageIndex]} alt="Main view" />
               <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
                 <DialogTrigger asChild>
                   <Button
@@ -188,9 +182,7 @@ export function ExpertTaskDetails() {
                           className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white hover:bg-white/10 rounded-full h-12 w-12"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedImageIndex((prev) =>
-                              prev === 0 ? task.images.length - 1 : prev - 1
-                            );
+                            setSelectedImageIndex((prev) => (prev === 0 ? task.images.length - 1 : prev - 1));
                           }}
                         >
                           <ChevronLeft className="h-8 w-8" />
@@ -201,9 +193,7 @@ export function ExpertTaskDetails() {
                           className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white hover:bg-white/10 rounded-full h-12 w-12"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedImageIndex((prev) =>
-                              prev === task.images.length - 1 ? 0 : prev + 1
-                            );
+                            setSelectedImageIndex((prev) => (prev === task.images.length - 1 ? 0 : prev + 1));
                           }}
                         >
                           <ChevronRight className="h-8 w-8" />
@@ -223,18 +213,14 @@ export function ExpertTaskDetails() {
                 <div
                   key={i}
                   className={cn(
-                    "aspect-square rounded-md overflow-hidden cursor-pointer border-2 transition-all",
+                    'aspect-square rounded-md overflow-hidden cursor-pointer border-2 transition-all',
                     selectedImageIndex === i
-                      ? "border-primary ring-2 ring-primary/20"
-                      : "border-transparent hover:border-primary/50"
+                      ? 'border-primary ring-2 ring-primary/20'
+                      : 'border-transparent hover:border-primary/50'
                   )}
                   onClick={() => setSelectedImageIndex(i)}
                 >
-                  <img
-                    src={img}
-                    alt={`Thumbnail ${i + 1}`}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={img} alt={`Thumbnail ${i + 1}`} className="w-full h-full object-cover" />
                 </div>
               ))}
             </div>
@@ -245,9 +231,7 @@ export function ExpertTaskDetails() {
               <CardTitle>Opis zgłoszenia</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="leading-relaxed text-muted-foreground">
-                {task.description}
-              </p>
+              <p className="leading-relaxed text-muted-foreground">{task.description}</p>
             </CardContent>
           </Card>
         </div>
@@ -263,24 +247,16 @@ export function ExpertTaskDetails() {
             </div>
             <CardContent className="p-6 space-y-6">
               <div className="text-center space-y-2">
-                <span className="text-sm text-muted-foreground">
-                  Wskaźnik autentyczności
-                </span>
+                <span className="text-sm text-muted-foreground">Wskaźnik autentyczności</span>
                 <div className="flex items-center justify-center gap-2">
-                  <span className="text-4xl font-bold text-yellow-600">
-                    {task.aiAnalysis.score}%
-                  </span>
+                  <span className="text-4xl font-bold text-yellow-600">{task.aiAnalysis.score}%</span>
                 </div>
                 <Progress
                   value={task.aiAnalysis.score}
                   className="h-3"
-                  style={
-                    { "--primary": "45.4 93.4% 47.5%" } as React.CSSProperties
-                  }
+                  style={{ '--primary': '45.4 93.4% 47.5%' } as React.CSSProperties}
                 />
-                <p className="text-sm font-medium text-yellow-600">
-                  Wynik niejednoznaczny
-                </p>
+                <p className="text-sm font-medium text-yellow-600">Wynik niejednoznaczny</p>
               </div>
 
               <Separator />
@@ -290,18 +266,10 @@ export function ExpertTaskDetails() {
                 <ul className="space-y-2">
                   {task.aiAnalysis.flags.map((flag, i) => (
                     <li key={i} className="flex gap-3 text-sm">
-                      {flag.type === "warning" && (
-                        <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0" />
-                      )}
-                      {flag.type === "success" && (
-                        <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                      )}
-                      {flag.type === "danger" && (
-                        <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />
-                      )}
-                      <span className="text-muted-foreground">
-                        {flag.message}
-                      </span>
+                      {flag.type === 'warning' && <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0" />}
+                      {flag.type === 'success' && <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />}
+                      {flag.type === 'danger' && <ShieldAlert className="h-5 w-5 text-red-500 shrink-0" />}
+                      <span className="text-muted-foreground">{flag.message}</span>
                     </li>
                   ))}
                 </ul>
@@ -321,9 +289,7 @@ export function ExpertTaskDetails() {
                 </Avatar>
                 <div>
                   <p className="font-medium">{task.user.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Reputacja: {task.user.reputation}
-                  </p>
+                  <p className="text-sm text-muted-foreground">Reputacja: {task.user.reputation}</p>
                 </div>
               </div>
             </CardContent>
@@ -340,17 +306,11 @@ export function ExpertTaskDetails() {
                   <div key={i} className="relative">
                     <div className="absolute -left-[21px] top-1 h-2.5 w-2.5 rounded-full bg-muted-foreground/30 ring-4 ring-background" />
                     <div className="flex flex-col gap-1">
-                      <span className="text-xs text-muted-foreground">
-                        {event.date}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{event.date}</span>
                       <span className="font-medium text-sm">{event.user}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {event.action}
-                      </span>
+                      <span className="text-sm text-muted-foreground">{event.action}</span>
                       {event.comment && (
-                        <p className="text-sm bg-muted/50 p-2 rounded mt-1 italic">
-                          "{event.comment}"
-                        </p>
+                        <p className="text-sm bg-muted/50 p-2 rounded mt-1 italic">"{event.comment}"</p>
                       )}
                     </div>
                   </div>
