@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import { ShieldCheck, LogOut } from 'lucide-react';
-import { AuthModal } from './AuthModal';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import {
@@ -14,16 +13,16 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 
 export function Navbar() {
-  const { user, isLoading, logout } = useAuth();
-  const initials = user?.name
-    ? user.name
-      .split(' ')
-      .map((chunk) => chunk[0])
-      .join('')
-      .substring(0, 2)
-      .toUpperCase()
-    : user?.email?.substring(0, 2).toUpperCase();
-  const userLabel = user?.name ?? user?.email ?? '';
+  const { user, isLoading, logout, openAuthModal } = useAuth();
+  const initialsSource = user?.username ?? user?.email ?? '';
+  const initials = initialsSource
+    .split(/\s|-|_|\./)
+    .filter(Boolean)
+    .map((chunk) => chunk[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase();
+  const userLabel = user?.username ?? user?.email ?? '';
 
   return (
     <nav className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-md supports-backdrop-filter:bg-background/60">
@@ -75,7 +74,9 @@ export function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <AuthModal />
+              <Button variant="outline" onClick={openAuthModal}>
+                Zaloguj się
+              </Button>
             )}
           </div>
         </div>

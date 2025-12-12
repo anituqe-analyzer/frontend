@@ -224,6 +224,16 @@ interface BackendAuction {
   updated_at: string;
 }
 
+interface CategoryDetailResponse {
+  id: number;
+  name: string;
+  description?: string | null;
+  auctions?: BackendAuction[];
+  recent_auctions?: BackendAuction[];
+  items?: BackendAuction[];
+  data?: BackendAuction[];
+}
+
 export interface Category {
   id: number;
   name: string;
@@ -257,22 +267,41 @@ export interface Auction {
 
 export interface Opinion {
   id: number;
-  auction_id: number;
-  user_name: string;
-  body?: string;
-  content?: string;
-  user_avatar?: string | null;
-  is_expert?: boolean;
+  content: string;
+  verdict: OpinionVerdict | null;
+  author_type: OpinionAuthorType;
+  score?: number | null;
+  user?: OpinionUser;
+  auction?: OpinionAuction;
+  votes_count?: number;
   created_at: string;
-  votes_up?: number;
-  votes_down?: number;
+  user_avatar?: string | null;
+  body?: string | null;
 }
+
+export type OpinionAuthorType = 'user' | 'expert';
+
+export interface OpinionUser {
+  id: number;
+  username: string;
+  role?: UserRole;
+}
+
+export interface OpinionAuction {
+  id: number;
+  title: string;
+}
+
+export type OpinionVerdict = 'authentic' | 'fake' | 'unsure';
+
+export type UserRole = 'user' | 'expert' | 'admin';
 
 export interface User {
   id: number;
   email: string;
+  username?: string;
+  role?: UserRole;
   name?: string;
-  role?: string;
 }
 
 export interface LoginPayload {
@@ -282,6 +311,7 @@ export interface LoginPayload {
 
 export interface LoginResponse {
   token: string;
+  user?: User;
 }
 
 export interface CreateAuctionPayload {
@@ -311,17 +341,6 @@ export interface OpinionVotePayload {
   vote_type: 1 | -1;
 }
 
-function buildQuery(params: Record<string, string | number | undefined>) {
-  const query = new URLSearchParams();
-  Object.entries(params).forEach(([ key, value ]) => {
-    if (value === undefined || value === null || value === '') return;
-    query.set(key, String(value));
-  });
-  const queryString = query.toString();
-
-  return queryString ? `?${queryString}` : '';
-}
-
 export async function login(payload: LoginPayload) {
   return request<LoginResponse>('/login', {
     method: 'POST',
@@ -339,24 +358,31 @@ export async function getCurrentUser(token?: string | null) {
 export async function getCategories() {
   const response = await request<Category[] | { data: Category[] } | { categories?: Category[] }>('/categories');
   const normalized = unwrapData(response);
-  const list = coerceArray<Category>(normalized, [ 'categories', 'items', 'results' ]);
+  const list = coerceArray<Category>(normalized, ['categories', 'items', 'results']);
   if (list) return list;
 
   return [];
 }
 
 export async function getAuctions(filters: AuctionFilters = {}) {
-  const query = buildQuery({
-    category_id: filters.categoryId,
-    search: filters.search,
-    page: filters.page,
-    per_page: filters.perPage,
-  });
+  if (filters.categoryId) {
+    const category = await request<CategoryDetailResponse>(`/categories/${filters.categoryId}`);
+    const normalizedList =
+      coerceArray<BackendAuction>(category, ['auctions', 'recent_auctions', 'items', 'data']) ??
+      (Array.isArray(category.recent_auctions) ? category.recent_auctions : null);
+
+    if (normalizedList) {
+      return normalizedList.map(normalizeAuction);
+    }
+
+    return [];
+  }
+
   const response = await request<BackendAuction[] | { data: BackendAuction[] } | { auctions?: BackendAuction[] }>(
-    `/auctions${query}`
+    '/auctions'
   );
   const normalized = unwrapData(response);
-  const list = coerceArray<BackendAuction>(normalized, [ 'auctions', 'items', 'results' ]);
+  const list = coerceArray<BackendAuction>(normalized, ['auctions', 'items', 'results']);
 
   if (list) {
     return list.map(normalizeAuction);
@@ -378,7 +404,7 @@ export async function createAuction(payload: CreateAuctionPayload) {
     body: {
       auction: {
         ...rest,
-        description: description_text,
+        description_text,
       },
     },
   });
@@ -387,15 +413,26 @@ export async function createAuction(payload: CreateAuctionPayload) {
 }
 
 export async function getAuctionOpinions(auctionId: number) {
-  const response = await request<Opinion[] | { data: Opinion[] }>(`/auctions/${auctionId}/opinions`);
-
-  return unwrapData(response);
+  const response = await request<Opinion[] | { data: Opinion[] } | { opinions?: Opinion[] } | { items?: Opinion[] }>(
+    `/auctions/${auctionId}/opinions`
+  );
+  const normalized = unwrapData(response);
+  const list = coerceArray<Opinion>(normalized, ['opinions', 'items', 'results']);
+  if (list) return list;
+  if (Array.isArray(normalized)) return normalized;
+  return [];
 }
 
-export async function createOpinion(auctionId: number, body: string) {
+export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'unsure') {
   return request<Opinion>(`/auctions/${auctionId}/opinions`, {
     method: 'POST',
-    body: { opinion: { body } },
+    body: {
+      opinion: {
+        content,
+        body: content,
+        verdict,
+      },
+    },
   });
 }
 

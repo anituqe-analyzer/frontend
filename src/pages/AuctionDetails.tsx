@@ -40,22 +40,31 @@ const FALLBACK_GALLERY = [
   'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?w=800&auto=format&fit=crop&q=60',
 ];
 
-interface AuctionPageData {
-  auction: Auction | null;
-  opinions: Opinion[];
-}
+const PENDING_STATUSES = new Set(['pending', 'pending_ai', 'needs_human_verification', 'disputed']);
 
-async function loadAuctionPage(auctionId: number): Promise<AuctionPageData> {
-  try {
-    const [auction, opinions] = await Promise.all([api.getAuctionById(auctionId), api.getAuctionOpinions(auctionId)]);
+type AuctionResource = {
+  auctionPromise: Promise<Auction | null>;
+  opinionsPromise: Promise<Opinion[]>;
+};
 
-    return { auction, opinions };
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
-      return { auction: null, opinions: [] };
-    }
-    throw error;
+const auctionResourceCache = new Map<string, AuctionResource>();
+
+function getAuctionResource(auctionId: number, refreshKey: number): AuctionResource {
+  const cacheKey = `${auctionId}:${refreshKey}`;
+
+  if (!auctionResourceCache.has(cacheKey)) {
+    const auctionPromise = api.getAuctionById(auctionId).catch((error) => {
+      if (error instanceof ApiError && error.status === 404) {
+        return null;
+      }
+      throw error;
+    });
+
+    const opinionsPromise = api.getAuctionOpinions(auctionId);
+    auctionResourceCache.set(cacheKey, { auctionPromise, opinionsPromise });
   }
+
+  return auctionResourceCache.get(cacheKey)!;
 }
 
 function PageSkeleton() {
@@ -111,11 +120,15 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const [newComment, setNewComment] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [isCommentPending, startCommentTransition] = useTransition();
   const [isVoting, startVoteTransition] = useTransition();
+  const [opinionVoteState, setOpinionVoteState] = useState<Record<number, 'up' | 'down' | null>>({});
+  const [opinionVoteError, setOpinionVoteError] = useState<string | null>(null);
 
-  const pagePromise = loadAuctionPage(auctionId);
-  const { auction, opinions } = use(pagePromise);
+  const resource = getAuctionResource(auctionId, refreshKey);
+  const auction = use(resource.auctionPromise);
+  const opinions = use(resource.opinionsPromise);
 
   if (!auction) {
     return <NotFoundBlock />;
@@ -160,7 +173,8 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const formattedCreationDatetime = Number.isNaN(createdDate.getTime())
     ? 'Brak danych'
     : createdDate.toLocaleString('pl-PL');
-  const commentAvatarLabel = (user?.name ?? user?.email ?? 'TY').substring(0, 2).toUpperCase();
+  const commentAvatarLabel = (user?.username ?? user?.email ?? 'TY').substring(0, 2).toUpperCase();
+  const isPendingAuction = PENDING_STATUSES.has(auction.verification_status ?? 'pending');
 
   const handleAddComment = () => {
     if (!newComment.trim()) return;
@@ -184,7 +198,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   };
 
   const handleVote = (type: 'authentic' | 'fake') => {
-    if (!user || !token || votingState === type) return;
+    if (!user || !token || votingState === type || !isPendingAuction) return;
 
     startVoteTransition(async () => {
       try {
@@ -195,6 +209,27 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
         console.error('Failed to vote', error);
       }
     });
+  };
+
+  const handleOpinionVote = async (opinionId: number, direction: 'up' | 'down') => {
+    if (!user || !token) {
+      setOpinionVoteError('Zaloguj się, aby oceniać opinie.');
+
+      return;
+    }
+
+    setOpinionVoteError(null);
+    setOpinionVoteState((prev) => ({ ...prev, [opinionId]: direction }));
+
+    try {
+      await api.voteOpinion(opinionId, { vote_type: direction === 'up' ? 1 : -1 });
+      setRefreshKey((prev) => prev + 1);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nie udało się zarejestrować głosu';
+      setOpinionVoteError(message);
+    } finally {
+      setOpinionVoteState((prev) => ({ ...prev, [opinionId]: null }));
+    }
   };
 
   return (
@@ -389,41 +424,99 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
 
               <Separator />
 
+              {!user && (
+                <p className="text-xs text-muted-foreground text-center">
+                  Zaloguj się, aby brać udział w głosowaniu na opinie.
+                </p>
+              )}
+              {opinionVoteError && <p className="text-sm text-destructive text-center">{opinionVoteError}</p>}
+
               <div className="space-y-6">
                 {opinions.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">Brak komentarzy. Bądź pierwszy!</p>
                 ) : (
-                  opinions.map((opinion) => (
-                    <div key={opinion.id} className="flex gap-4">
-                      <Avatar className="h-10 w-10 border">
-                        <AvatarImage src={opinion.user_avatar ?? undefined} />
-                        <AvatarFallback>{opinion.user_name.substring(0, 2).toUpperCase()}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold text-sm">{opinion.user_name}</span>
-                          {opinion.is_expert && (
-                            <Badge
-                              variant="secondary"
-                              className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200 text-[10px] px-1.5 py-0 h-5"
-                            >
-                              <ShieldCheck className="mr-1 h-3 w-3" /> Ekspert
+                  opinions.map((opinion) => {
+                    const displayName = opinion.user?.username?.trim() || 'Anonimowy użytkownik';
+                    const initials = displayName.substring(0, 2).toUpperCase();
+                    const roleLabel = opinion.user?.role ?? opinion.author_type ?? 'user';
+                    const isExpertRole = roleLabel === 'expert' || roleLabel === 'admin';
+                    const readableRole =
+                      roleLabel === 'admin' ? 'Administrator' : roleLabel === 'expert' ? 'Ekspert' : 'Użytkownik';
+                    const verdictLabel =
+                      opinion.verdict === 'authentic'
+                        ? 'Autentyk'
+                        : opinion.verdict === 'fake'
+                          ? 'Falsyfikat'
+                          : 'Werdykt niejednoznaczny';
+                    const verdictClass =
+                      opinion.verdict === 'authentic'
+                        ? 'bg-green-100 text-green-800 border-green-200'
+                        : opinion.verdict === 'fake'
+                          ? 'bg-red-100 text-red-800 border-red-200'
+                          : 'bg-yellow-100 text-yellow-800 border-yellow-200';
+                    const opinionScore = opinion.score ?? opinion.votes_count ?? 0;
+
+                    return (
+                      <div key={opinion.id} className="flex gap-4">
+                        <Avatar className="h-10 w-10 border">
+                          <AvatarImage src={opinion.user_avatar ?? undefined} />
+                          <AvatarFallback>{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 space-y-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-semibold text-sm">{displayName}</span>
+                            <span className="text-xs text-muted-foreground">({readableRole})</span>
+                            {isExpertRole && (
+                              <Badge
+                                variant="secondary"
+                                className="bg-blue-100 text-blue-800 hover:bg-blue-200 border-blue-200 text-[10px] px-1.5 py-0 h-5"
+                              >
+                                <ShieldCheck className="mr-1 h-3 w-3" /> Zweryfikowany
+                              </Badge>
+                            )}
+                            <Badge variant="secondary" className={`${verdictClass} text-[10px] px-1.5 py-0 h-5`}>
+                              {verdictLabel}
                             </Badge>
-                          )}
-                          <span className="text-xs text-muted-foreground ml-auto">
-                            {new Date(opinion.created_at).toLocaleDateString()}{' '}
-                            {new Date(opinion.created_at).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
+                            <span className="text-xs text-muted-foreground ml-auto">
+                              {new Date(opinion.created_at).toLocaleDateString()}{' '}
+                              {new Date(opinion.created_at).toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              })}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground leading-relaxed">
+                            {opinion.content ?? opinion.body ?? 'Brak treści'}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground pt-1">
+                            <Badge variant="outline" className="text-[11px]">
+                              Bilans głosów: {opinionScore > 0 ? `+${opinionScore}` : opinionScore}
+                            </Badge>
+                            <div className="flex gap-2 ml-auto">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                                onClick={() => handleOpinionVote(opinion.id, 'up')}
+                                disabled={!user || Boolean(opinionVoteState[opinion.id])}
+                              >
+                                <ThumbsUp className="h-3 w-3 mr-1" /> Popieram
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-3 text-xs"
+                                onClick={() => handleOpinionVote(opinion.id, 'down')}
+                                disabled={!user || Boolean(opinionVoteState[opinion.id])}
+                              >
+                                <ThumbsDown className="h-3 w-3 mr-1" /> Nie zgadzam się
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                          {opinion.content ?? opinion.body}
-                        </p>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </CardContent>
@@ -459,6 +552,13 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                 </div>
               </div>
 
+              {!isPendingAuction && (
+                <div className="rounded-md border border-yellow-200 bg-yellow-50 text-yellow-900 text-sm p-3">
+                  Proces weryfikacji tego zgłoszenia został zakończony. Możesz dodawać komentarze, ale głosowanie jest
+                  wyłączone.
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="border rounded-lg p-4">
                   <p className="text-sm text-muted-foreground">Autentyk</p>
@@ -468,7 +568,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     size="sm"
                     className="mt-3 w-full"
                     onClick={() => handleVote('authentic')}
-                    disabled={votingState !== null || isVoting || !user}
+                    disabled={!isPendingAuction || votingState !== null || isVoting || !user}
                   >
                     <ThumbsUp className="mr-2 h-4 w-4" /> Głosuj
                   </Button>
@@ -481,7 +581,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     size="sm"
                     className="mt-3 w-full"
                     onClick={() => handleVote('fake')}
-                    disabled={votingState !== null || isVoting || !user}
+                    disabled={!isPendingAuction || votingState !== null || isVoting || !user}
                   >
                     <ThumbsDown className="mr-2 h-4 w-4" /> Zgłoś
                   </Button>

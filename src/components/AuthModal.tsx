@@ -1,24 +1,28 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
 
-export function AuthModal() {
-  const [ open, setOpen ] = useState(false);
+interface AuthModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function AuthModal({ open, onOpenChange }: AuthModalProps) {
   const { login, isAuthenticating, error } = useAuth();
-  const [ formData, setFormData ] = useState({ email: '', password: '' });
-  const [ localError, setLocalError ] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ email: '', password: '' });
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setFormData({ email: '', password: '' });
+      setLocalError(null);
+    }
+  }, [open]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -26,7 +30,7 @@ export function AuthModal() {
 
     try {
       await login(formData);
-      setOpen(false);
+      onOpenChange(false);
       setFormData({ email: '', password: '' });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Nie udało się zalogować';
@@ -35,10 +39,7 @@ export function AuthModal() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline">Zaloguj się</Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Wejście do panelu</DialogTitle>

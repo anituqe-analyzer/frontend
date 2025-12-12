@@ -10,16 +10,24 @@ interface AuthContextValue {
   error: string | null;
   login: (payload: LoginPayload) => Promise<void>;
   logout: () => void;
+  authModalOpen: boolean;
+  openAuthModal: () => void;
+  closeAuthModal: () => void;
+  requireAuth: (path?: string | null) => void;
+  requestedPath: string | null;
+  clearRequestedPath: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [ user, setUser ] = useState<User | null>(null);
-  const [ token, setToken ] = useState<string | null>(() => getStoredToken());
-  const [ isLoading, setIsLoading ] = useState(true);
-  const [ isAuthenticating, setIsAuthenticating ] = useState(false);
-  const [ error, setError ] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(() => getStoredToken());
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [requestedPath, setRequestedPath] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -53,18 +61,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [ token ]);
+  }, [token]);
 
   const login = useCallback(async (payload: LoginPayload) => {
     setIsAuthenticating(true);
     setError(null);
 
     try {
-      const { token } = await api.login(payload);
+      const { token, user: authenticatedUser } = await api.login(payload);
       storeToken(token);
       setToken(token);
-      const currentUser = await api.getCurrentUser(token);
-      setUser(currentUser);
+      const resolvedUser = authenticatedUser ?? (await api.getCurrentUser(token));
+      setUser(resolvedUser);
+      setAuthModalOpen(false);
+      setRequestedPath(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Nie udało się zalogować';
       setError(message);
@@ -82,6 +92,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     setError(null);
+    setAuthModalOpen(false);
+    setRequestedPath(null);
+  }, []);
+
+  const openAuthModal = useCallback(() => {
+    setAuthModalOpen(true);
+  }, []);
+
+  const closeAuthModal = useCallback(() => {
+    setAuthModalOpen(false);
+  }, []);
+
+  const requireAuth = useCallback((path?: string | null) => {
+    if (path) {
+      setRequestedPath(path);
+    }
+    setAuthModalOpen(true);
+  }, []);
+
+  const clearRequestedPath = useCallback(() => {
+    setRequestedPath(null);
   }, []);
 
   const value = useMemo<AuthContextValue>(
@@ -93,8 +124,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       error,
       login,
       logout,
+      authModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      requireAuth,
+      requestedPath,
+      clearRequestedPath,
     }),
-    [ user, token, isLoading, isAuthenticating, error, login, logout ]
+    [
+      user,
+      token,
+      isLoading,
+      isAuthenticating,
+      error,
+      login,
+      logout,
+      authModalOpen,
+      openAuthModal,
+      closeAuthModal,
+      requireAuth,
+      requestedPath,
+      clearRequestedPath,
+    ]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

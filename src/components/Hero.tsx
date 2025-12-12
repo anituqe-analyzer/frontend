@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function Hero() {
-  const [ url, setUrl ] = useState('');
+  const [url, setUrl] = useState('');
   const navigate = useNavigate();
 
   const handleAnalyze = () => {
@@ -32,7 +32,7 @@ export function Hero() {
 
       <div className="flex flex-col items-center justify-center px-4 py-24 text-center md:py-32 relative z-10">
         <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary/10 text-primary hover:bg-primary/20 mb-8">
-          Nowość: Weryfikacja AI 2.0
+          Nowość: Weryfikacja AI
         </div>
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-6xl mb-6 bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
           Sprawdź autentyczność{' '}
@@ -76,10 +76,6 @@ export function Hero() {
           <span className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-red-500"></span>
             eBay
-          </span>
-          <span className="flex items-center gap-2">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-            Catawiki
           </span>
         </div>
       </div>
