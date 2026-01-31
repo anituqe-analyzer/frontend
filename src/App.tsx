@@ -1,5 +1,6 @@
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Home } from './pages/Home';
 import { Dashboard } from './pages/Dashboard';
 import { ExpertTaskDetails } from './pages/ExpertTaskDetails';
@@ -27,7 +28,8 @@ function App() {
         <AuthModal open={authModalOpen} onOpenChange={handleAuthModalToggle} />
         <Navbar />
         <main className="flex-1">
-          <Routes>
+          <ErrorBoundary>
+            <Routes>
             <Route path="/" element={<Home />} />
             <Route
               path="/dashboard"
@@ -40,7 +42,8 @@ function App() {
             <Route path="/add-auction" element={<AddAuction />} />
             <Route path="/auction/:id" element={<AuctionDetails />} />
             <Route path="/expert/task/:id" element={<ExpertTaskDetails />} />
-          </Routes>
+            </Routes>
+          </ErrorBoundary>
         </main>
         <footer className="border-t py-8 md:py-12 bg-background/50 backdrop-blur-sm">
           <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 flex flex-col items-center justify-between gap-4 md:flex-row">

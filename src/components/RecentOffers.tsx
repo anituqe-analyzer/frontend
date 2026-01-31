@@ -1,5 +1,6 @@
-import { useState, useEffect, use, Suspense, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -30,16 +31,19 @@ const getScoreLabel = (score: number) => {
 };
 
 function CategoryList({
-  categoriesPromise,
+  categories,
+  loading,
   selectedCategory,
   onSelectCategory,
 }: {
-  categoriesPromise: Promise<Category[]>;
+  categories: Category[];
+  loading: boolean;
   selectedCategory: number | null;
   onSelectCategory: (id: number | null) => void;
 }) {
-  const categoriesData = use(categoriesPromise);
-  const categories = Array.isArray(categoriesData) ? categoriesData : [];
+  if (loading) {
+    return <div className="h-10 w-full animate-pulse bg-muted/20 rounded-full mb-8" />;
+  }
 
   return (
     <div className="flex flex-wrap gap-2 mb-8">
@@ -210,8 +214,17 @@ function AuctionSection({
   );
 }
 
-function AuctionsBoard({ auctionsPromise }: { auctionsPromise: Promise<Auction[]> }) {
-  const auctions = use(auctionsPromise);
+function AuctionsBoard({ auctions, loading }: { auctions: Auction[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        {[...Array(4)].map((_, i) => (
+          <Card key={i} className="h-[400px] animate-pulse bg-muted/20" />
+        ))}
+      </div>
+    );
+  }
+
   const pendingAuctions = auctions.filter((offer) => PENDING_STATUSES.has(offer.verification_status ?? 'pending'));
   const finalizedAuctions = auctions.filter((offer) => !PENDING_STATUSES.has(offer.verification_status ?? 'pending'));
 
@@ -239,6 +252,22 @@ export function RecentOffers() {
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: api.getCategories,
+  });
+
+  const { data: auctions = [], isLoading: auctionsLoading } = useQuery({
+    queryKey: ['auctions', selectedCategory, debouncedSearchTerm],
+    queryFn: ({ queryKey }) => {
+      const [, categoryId, search] = queryKey;
+      return api.getAuctions({
+        categoryId: categoryId || undefined,
+        search: search as string,
+      });
+    },
+  });
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearchTerm(searchTerm);
@@ -246,15 +275,6 @@ export function RecentOffers() {
 
     return () => clearTimeout(timer);
   }, [searchTerm]);
-
-  const categoriesPromise = useMemo(() => api.getCategories(), []);
-
-  const auctionsPromise = useMemo(() => {
-    return api.getAuctions({
-      categoryId: selectedCategory || undefined,
-      search: debouncedSearchTerm,
-    });
-  }, [selectedCategory, debouncedSearchTerm]);
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-12">
@@ -275,25 +295,14 @@ export function RecentOffers() {
         </div>
       </div>
 
-      <Suspense fallback={<div className="h-10 w-full animate-pulse bg-muted/20 rounded-full mb-8" />}>
-        <CategoryList
-          categoriesPromise={categoriesPromise}
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-        />
-      </Suspense>
+      <CategoryList
+        categories={categories}
+        loading={categoriesLoading}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+      />
 
-      <Suspense
-        fallback={
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
-            {[...Array(4)].map((_, i) => (
-              <Card key={i} className="h-[400px] animate-pulse bg-muted/20" />
-            ))}
-          </div>
-        }
-      >
-        <AuctionsBoard auctionsPromise={auctionsPromise} />
-      </Suspense>
+      <AuctionsBoard auctions={auctions} loading={auctionsLoading} />
     </div>
   );
 }

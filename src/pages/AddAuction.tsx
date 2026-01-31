@@ -1,6 +1,7 @@
-import { Suspense, use, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,18 +22,13 @@ function AddAuctionSkeleton() {
 export function AddAuction() {
   const [ searchParams ] = useSearchParams();
   const initialUrl = searchParams.get('url') ?? '';
-
-  return (
-    <Suspense fallback={<AddAuctionSkeleton />}>
-      <AddAuctionContent initialUrl={initialUrl} />
-    </Suspense>
-  );
-}
-
-function AddAuctionContent({ initialUrl }: { initialUrl: string }) {
   const navigate = useNavigate();
-  const categoriesPromise = api.getCategories();
-  const categories = use(categoriesPromise);
+
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ['categories'],
+    queryFn: api.getCategories,
+  });
+
   const [ isSubmitting, setIsSubmitting ] = useState(false);
   const [ isScraping, setIsScraping ] = useState(false);
   const [ formData, setFormData ] = useState({
@@ -178,8 +174,9 @@ function AddAuctionContent({ initialUrl }: { initialUrl: string }) {
                   className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   value={formData.category_id}
                   onChange={handleInputChange}
+                  disabled={categoriesLoading}
                 >
-                  <option value="">Wybierz kategorię...</option>
+                  <option value="">{categoriesLoading ? 'Ładowanie...' : 'Wybierz kategorię...'}</option>
                   {categories.map((cat) => (
                     <option key={cat.id} value={cat.id}>
                       {cat.name}

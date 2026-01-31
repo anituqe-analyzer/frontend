@@ -366,7 +366,8 @@ export async function getCategories() {
 
 export async function getAuctions(filters: AuctionFilters = {}) {
   if (filters.categoryId) {
-    const category = await request<CategoryDetailResponse>(`/categories/${filters.categoryId}`);
+    const category = await request<CategoryDetailResponse>(`
+      s/${filters.categoryId}`);
     const normalizedList =
       coerceArray<BackendAuction>(category, ['auctions', 'recent_auctions', 'items', 'data']) ??
       (Array.isArray(category.recent_auctions) ? category.recent_auctions : null);
