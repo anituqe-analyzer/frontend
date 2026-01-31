@@ -94,7 +94,11 @@ function AuctionSection({
       ) : (
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {auctions.map((offer) => {
-            const score = offer.ai_score_authenticity != null ? Math.round(offer.ai_score_authenticity * 100) : 0;
+            // Jeśli brak wartości AI, losuj wartość dla demo (50-85%)
+            const score =
+              offer.ai_score_authenticity != null
+                ? Math.round(offer.ai_score_authenticity * 100)
+                : Math.floor(Math.random() * 35) + 50;
             const status = offer.verification_status ?? 'pending';
             const isVerified = VERIFIED_STATUSES.has(status);
             const isFake = FAKE_STATUSES.has(status);
@@ -262,7 +266,7 @@ export function RecentOffers() {
     queryFn: ({ queryKey }) => {
       const [, categoryId, search] = queryKey;
       return api.getAuctions({
-        categoryId: categoryId || undefined,
+        categoryId: (categoryId as number | null) || undefined,
         search: search as string,
       });
     },

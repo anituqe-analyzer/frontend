@@ -1,5 +1,10 @@
+import { getAuthToken, setAuthToken, clearAuthToken, getAuthHeaders, getAuthHeadersWithContentType } from './authToken';
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
-const TOKEN_STORAGE_KEY = 'antique_auth_token';
+// const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL ?? 'https://hatamo-antiqueauthbackend.hf.space').replace(
+//   /\/$/,
+//   ''
+// );
 
 export class ApiError extends Error {
   status: number;
@@ -14,89 +19,10 @@ export class ApiError extends Error {
   }
 }
 
-const isBrowser = typeof window !== 'undefined';
-
-export function getStoredToken() {
-  if (!isBrowser) return null;
-
-  return window.localStorage.getItem(TOKEN_STORAGE_KEY);
-}
-
-export function storeToken(token: string) {
-  if (!isBrowser) return;
-  window.localStorage.setItem(TOKEN_STORAGE_KEY, token);
-}
-
-export function clearStoredToken() {
-  if (!isBrowser) return;
-  window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-}
-
-interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-  body?: unknown;
-  headers?: Record<string, string>;
-  token?: string | null;
-  skipAuth?: boolean;
-}
-
-async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
-  const method = options.method ?? 'GET';
-  const headers = new Headers(options.headers ?? {});
-  const bodyIsFormData = options.body instanceof FormData;
-
-  if (!bodyIsFormData && method !== 'GET' && !headers.has('Content-Type')) {
-    headers.set('Content-Type', 'application/json');
-  }
-  headers.set('Accept', 'application/json');
-
-  const token = options.skipAuth ? null : (options.token ?? getStoredToken());
-
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-
-  const init: RequestInit = {
-    method,
-    headers,
-  };
-
-  if (method !== 'GET' && options.body !== undefined) {
-    init.body = bodyIsFormData ? (options.body as BodyInit) : JSON.stringify(options.body);
-  }
-
-  let response: Response;
-
-  try {
-    response = await fetch(url, init);
-  } catch (error) {
-    throw new ApiError('Nie udało się nawiązać połączenia z serwerem', 0, error);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  let parsedBody: unknown = null;
-  const raw = await response.text();
-
-  if (raw) {
-    try {
-      parsedBody = JSON.parse(raw);
-    } catch (error) {
-      throw new ApiError('Serwer zwrócił nieprawidłową odpowiedź', response.status, error);
-    }
-  }
-
-  if (!response.ok) {
-    const message =
-      (parsedBody as { message?: string } | null)?.message ?? `Żądanie zakończyło się błędem (${response.status})`;
-    throw new ApiError(message, response.status, parsedBody);
-  }
-
-  return parsedBody as T;
-}
+// Re-export token functions for backward compatibility
+export const getStoredToken = getAuthToken;
+export const storeToken = setAuthToken;
+export const clearStoredToken = clearAuthToken;
 
 function unwrapData<T>(payload: T | { data: T }): T {
   if (payload && typeof payload === 'object' && !Array.isArray(payload) && 'data' in payload) {
@@ -292,7 +218,7 @@ export interface OpinionAuction {
   title: string;
 }
 
-export type OpinionVerdict = 'authentic' | 'fake' | 'unsure';
+export type OpinionVerdict = 'authentic' | 'fake' | 'uncertain';
 
 export type UserRole = 'user' | 'expert' | 'admin';
 
@@ -338,26 +264,53 @@ export interface VoteResponse {
 }
 
 export interface OpinionVotePayload {
-  vote_type: 1 | -1;
+  vote_type: 'upvote' | 'downvote';
 }
 
 export async function login(payload: LoginPayload) {
-  return request<LoginResponse>('/login', {
+  const response = await fetch(`${API_BASE_URL}/login`, {
     method: 'POST',
-    body: payload,
-    skipAuth: true,
+    headers: {
+      'content-type': 'application/json',
+      accept: 'application/json',
+    },
+    body: JSON.stringify(payload),
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Login failed', response.status, error);
+  }
+
+  return response.json() as Promise<LoginResponse>;
 }
 
 export async function getCurrentUser(token?: string | null) {
-  return request<User>('/user', {
-    token: token ?? undefined,
-  });
+  const authToken = token ?? getAuthToken();
+  const headers: HeadersInit = authToken
+    ? { accept: 'application/json', authorization: `Bearer ${authToken}` }
+    : { accept: 'application/json' };
+
+  const response = await fetch(`${API_BASE_URL}/user`, { headers });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to get user', response.status, error);
+  }
+
+  return response.json() as Promise<User>;
 }
 
 export async function getCategories() {
-  const response = await request<Category[] | { data: Category[] } | { categories?: Category[] }>('/categories');
-  const normalized = unwrapData(response);
+  const response = await fetch(`${API_BASE_URL}/categories`, { headers: getAuthHeaders() });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to fetch categories', response.status, error);
+  }
+
+  const data = (await response.json()) as Category[] | { data: Category[] } | { categories?: Category[] };
+  const normalized = unwrapData(data);
   const list = coerceArray<Category>(normalized, ['categories', 'items', 'results']);
   if (list) return list;
 
@@ -366,8 +319,14 @@ export async function getCategories() {
 
 export async function getAuctions(filters: AuctionFilters = {}) {
   if (filters.categoryId) {
-    const category = await request<CategoryDetailResponse>(`
-      s/${filters.categoryId}`);
+    const response = await fetch(`${API_BASE_URL}/categories/${filters.categoryId}`, { headers: getAuthHeaders() });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new ApiError(error.message || 'Failed to fetch auctions', response.status, error);
+    }
+
+    const category = (await response.json()) as CategoryDetailResponse;
     const normalizedList =
       coerceArray<BackendAuction>(category, ['auctions', 'recent_auctions', 'items', 'data']) ??
       (Array.isArray(category.recent_auctions) ? category.recent_auctions : null);
@@ -379,10 +338,18 @@ export async function getAuctions(filters: AuctionFilters = {}) {
     return [];
   }
 
-  const response = await request<BackendAuction[] | { data: BackendAuction[] } | { auctions?: BackendAuction[] }>(
-    '/auctions'
-  );
-  const normalized = unwrapData(response);
+  const response = await fetch(`${API_BASE_URL}/auctions`, { headers: getAuthHeaders() });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to fetch auctions', response.status, error);
+  }
+
+  const data = (await response.json()) as
+    | BackendAuction[]
+    | { data: BackendAuction[] }
+    | { auctions?: BackendAuction[] };
+  const normalized = unwrapData(data);
   const list = coerceArray<BackendAuction>(normalized, ['auctions', 'items', 'results']);
 
   if (list) {
@@ -393,66 +360,416 @@ export async function getAuctions(filters: AuctionFilters = {}) {
 }
 
 export async function getAuctionById(id: number) {
-  const raw = await request<BackendAuction>(`/auctions/${id}`);
+  const response = await fetch(`${API_BASE_URL}/auctions/${id}`, { headers: getAuthHeaders() });
 
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to fetch auction', response.status, error);
+  }
+
+  const raw = (await response.json()) as BackendAuction;
   return normalizeAuction(raw);
 }
 
 export async function createAuction(payload: CreateAuctionPayload) {
   const { description_text, ...rest } = payload;
-  const raw = await request<BackendAuction>('/auctions', {
+  const response = await fetch(`${API_BASE_URL}/auctions`, {
     method: 'POST',
-    body: {
+    headers: getAuthHeadersWithContentType(),
+    body: JSON.stringify({
       auction: {
         ...rest,
         description_text,
       },
-    },
+    }),
   });
 
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to create auction', response.status, error);
+  }
+
+  const raw = (await response.json()) as BackendAuction;
   return normalizeAuction(raw);
 }
 
 export async function getAuctionOpinions(auctionId: number) {
-  const response = await request<Opinion[] | { data: Opinion[] } | { opinions?: Opinion[] } | { items?: Opinion[] }>(
-    `/auctions/${auctionId}/opinions`
-  );
-  const normalized = unwrapData(response);
+  const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/opinions`, { headers: getAuthHeaders() });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to fetch opinions', response.status, error);
+  }
+
+  const data = (await response.json()) as
+    | Opinion[]
+    | { data: Opinion[] }
+    | { opinions?: Opinion[] }
+    | { items?: Opinion[] };
+  const normalized = unwrapData(data);
   const list = coerceArray<Opinion>(normalized, ['opinions', 'items', 'results']);
   if (list) return list;
   if (Array.isArray(normalized)) return normalized;
   return [];
 }
 
-export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'unsure') {
-  return request<Opinion>(`/auctions/${auctionId}/opinions`, {
+export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'uncertain') {
+  const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/opinions`, {
     method: 'POST',
-    body: {
+    headers: getAuthHeadersWithContentType(),
+    body: JSON.stringify({
       opinion: {
         content,
-        body: content,
         verdict,
       },
-    },
+    }),
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to create opinion', response.status, error);
+  }
+
+  return response.json() as Promise<Opinion>;
 }
 
 export async function voteOpinion(opinionId: number, payload: OpinionVotePayload) {
-  return request(`/opinions/${opinionId}/vote`, {
+  const response = await fetch(`${API_BASE_URL}/opinions/${opinionId}/vote`, {
     method: 'POST',
-    body: { vote: payload },
+    headers: getAuthHeadersWithContentType(),
+    body: JSON.stringify({ vote: payload }),
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new ApiError(error.message || 'Failed to vote on opinion', response.status, error);
+  }
+
+  if (response.status === 204) {
+    return undefined;
+  }
+
+  return response.json();
 }
 
-export async function voteAuction(auctionId: number, voteType: 'authentic' | 'fake'): Promise<VoteResponse> {
-  return request<VoteResponse>(`/auctions/${auctionId}/vote`, {
-    method: 'POST',
-    body: {
-      vote: {
-        vote_type: voteType === 'authentic' ? 1 : -1,
-      },
-    },
-  });
+// Note: Auction voting endpoint not documented in API
+// export async function voteAuction(auctionId: number, voteType: 'authentic' | 'fake'): Promise<VoteResponse> {
+//   const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/vote`, {
+//     method: 'POST',
+//     headers: getAuthHeadersWithContentType(),
+//     body: JSON.stringify({
+//       vote: {
+//         vote_type: voteType === 'authentic' ? 1 : -1,
+//       },
+//     }),
+//   });
+//
+//   if (!response.ok) {
+//     const error = await response.json().catch(() => ({}));
+//     throw new ApiError(error.message || 'Failed to vote on auction', response.status, error);
+//   }
+//
+//   return response.json() as Promise<VoteResponse>;
+// }
+
+// ==============================================
+// AI API - Auction Authenticity Evaluation
+// ==============================================
+
+export interface AIPredictPayload {
+  image: File;
+  title: string;
+  description: string;
+}
+
+export interface AIPredictResponse {
+  status: 'success' | 'error';
+  original_probability: number;
+  scam_probability: number;
+  replica_probability: number;
+  verdict: 'ORIGINAL' | 'SCAM' | 'REPLICA' | 'UNCERTAIN';
+  confidence: number;
+  margin: number;
+  message?: string;
+  error?: string;
+}
+
+export interface AIEnsemblePredictPayload {
+  images: File[];
+  title: string;
+  description: string;
+}
+
+export interface AIEnsemblePredictResponse {
+  status: 'success' | 'error';
+  image_count: number;
+  original_probability: number;
+  scam_probability: number;
+  replica_probability: number;
+  verdict: 'ORIGINAL' | 'SCAM' | 'REPLICA' | 'UNCERTAIN';
+  confidence: number;
+  margin: number;
+  per_image_probs?: number[][];
+  error?: string;
+}
+
+export interface AIValidateUrlPayload {
+  url: string;
+  max_images?: number;
+}
+
+export interface AIValidateUrlResponse {
+  status: 'success' | 'error';
+  url?: string;
+  title?: string;
+  platform?: string;
+  total_images_available?: number;
+  requested_max_images?: number;
+  image_count_used?: number;
+  original_probability?: number;
+  scam_probability?: number;
+  replica_probability?: number;
+  verdict?: 'ORIGINAL' | 'SCAM' | 'REPLICA' | 'UNCERTAIN';
+  confidence?: number;
+  margin?: number;
+  error?: string;
+  traceback?: string;
+}
+
+/**
+ * Ocena autentyczności aukcji na podstawie pojedynczego zdjęcia
+ *
+ * MOCK: Backend AI obecnie niedostępny - zwraca przykładowe dane
+ */
+export async function predictAuctionAuthenticity(_payload: AIPredictPayload): Promise<AIPredictResponse> {
+  // MOCK: Symulacja opóźnienia API
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+
+  // MOCK: Generowanie losowych prawdopodobieństw
+  const originalProb = Math.random() * 0.4 + 0.5; // 0.5-0.9
+  const scamProb = Math.random() * 0.2;
+  const replicaProb = 1 - originalProb - scamProb;
+
+  const probs = {
+    ORIGINAL: originalProb,
+    SCAM: scamProb,
+    REPLICA: replicaProb,
+  };
+
+  const verdict = Object.keys(probs).reduce((a, b) =>
+    probs[a as keyof typeof probs] > probs[b as keyof typeof probs] ? a : b
+  ) as 'ORIGINAL' | 'SCAM' | 'REPLICA';
+
+  return {
+    status: 'success',
+    original_probability: originalProb,
+    scam_probability: scamProb,
+    replica_probability: replicaProb,
+    verdict: verdict,
+    confidence: Math.max(originalProb, scamProb, replicaProb),
+    margin: Math.max(originalProb, scamProb, replicaProb) - Math.min(originalProb, scamProb, replicaProb),
+    message: `Aukcja ma ${Math.round(Math.max(originalProb, scamProb, replicaProb) * 100)}% pewności: ${verdict}`,
+  };
+
+  // PRAWDZIWE WYWOŁANIE API (wyłączone)
+  // const formData = new FormData();
+  // formData.append('image', payload.image);
+  // formData.append('title', payload.title);
+  // formData.append('description', payload.description);
+  //
+  // const response = await fetch(`${AI_API_BASE_URL}/predict`, {
+  //   method: 'POST',
+  //   body: formData,
+  // });
+  //
+  // if (!response.ok) {
+  //   const error = await response.json().catch(() => ({}));
+  //   throw new ApiError(error.error || 'AI prediction failed', response.status, error);
+  // }
+  //
+  // return response.json() as Promise<AIPredictResponse>;
+}
+
+/**
+ * Ocena autentyczności aukcji na podstawie wielu zdjęć (ensemble)
+ *
+ * MOCK: Backend AI obecnie niedostępny - zwraca przykładowe dane
+ */
+export async function predictAuctionAuthenticityEnsemble(
+  payload: AIEnsemblePredictPayload
+): Promise<AIEnsemblePredictResponse> {
+  // MOCK: Symulacja opóźnienia API
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+
+  // MOCK: Generowanie losowych prawdopodobieństw (wyższe dla authentic przy większej liczbie zdjęć)
+  const imageCount = payload.images.length;
+  const bonus = Math.min(imageCount * 0.05, 0.2); // Bonus za więcej zdjęć
+
+  const originalProb = Math.random() * 0.3 + 0.5 + bonus; // 0.5-1.0
+  const scamProb = Math.random() * 0.15;
+  const replicaProb = Math.max(0, 1 - originalProb - scamProb);
+
+  const normalized = originalProb + scamProb + replicaProb;
+  const finalOriginal = originalProb / normalized;
+  const finalScam = scamProb / normalized;
+  const finalReplica = replicaProb / normalized;
+
+  const probs = {
+    ORIGINAL: finalOriginal,
+    SCAM: finalScam,
+    REPLICA: finalReplica,
+  };
+
+  const verdict = Object.keys(probs).reduce((a, b) =>
+    probs[a as keyof typeof probs] > probs[b as keyof typeof probs] ? a : b
+  ) as 'ORIGINAL' | 'SCAM' | 'REPLICA';
+
+  // MOCK: Generowanie per-image probs
+  const perImageProbs = payload.images.map(() => [Math.random() * 0.4 + 0.4, Math.random() * 0.2, Math.random() * 0.2]);
+
+  return {
+    status: 'success',
+    image_count: imageCount,
+    original_probability: finalOriginal,
+    scam_probability: finalScam,
+    replica_probability: finalReplica,
+    verdict: verdict,
+    confidence: Math.max(finalOriginal, finalScam, finalReplica),
+    margin: Math.max(finalOriginal, finalScam, finalReplica) - Math.min(finalOriginal, finalScam, finalReplica),
+    per_image_probs: perImageProbs,
+  };
+
+  // PRAWDZIWE WYWOŁANIE API (wyłączone)
+  // const formData = new FormData();
+  //
+  // for (const image of payload.images) {
+  //   formData.append('images', image);
+  // }
+  //
+  // formData.append('title', payload.title);
+  // formData.append('description', payload.description);
+  //
+  // const response = await fetch(`${AI_API_BASE_URL}/predict_ensemble`, {
+  //   method: 'POST',
+  //   body: formData,
+  // });
+  //
+  // if (!response.ok) {
+  //   const error = await response.json().catch(() => ({}));
+  //   throw new ApiError(error.error || 'AI ensemble prediction failed', response.status, error);
+  // }
+  //
+  // return response.json() as Promise<AIEnsemblePredictResponse>;
+}
+
+/**
+ * Walidacja aukcji bezpośrednio z URL (scraping + ocena AI)
+ * Obsługuje platformy: Allegro, OLX, eBay
+ *
+ * MOCK: Backend AI obecnie niedostępny - zwraca przykładowe dane
+ */
+export async function validateAuctionFromUrl(payload: AIValidateUrlPayload): Promise<AIValidateUrlResponse> {
+  // MOCK: Symulacja opóźnienia API (scraping + analiza)
+  await new Promise((resolve) => setTimeout(resolve, 3000));
+
+  // MOCK: Wykrycie platformy z URL
+  let platform = 'nieznana';
+  if (payload.url.includes('allegro')) platform = 'Allegro';
+  else if (payload.url.includes('olx')) platform = 'OLX';
+  else if (payload.url.includes('ebay')) platform = 'eBay';
+
+  // MOCK: Generowanie tytułu na podstawie platformy
+  const titles = {
+    Allegro: 'Antyczny zegar ścienny z XIX wieku',
+    OLX: 'Stara porcelanowa figurka',
+    eBay: 'Vintage pocket watch',
+    nieznana: 'Przedmiot antykwaryczny',
+  };
+
+  const maxImages = payload.max_images || 3;
+  const totalAvailable = Math.floor(Math.random() * 5) + 3; // 3-7 zdjęć
+  const imagesUsed = Math.min(maxImages, totalAvailable);
+
+  // MOCK: Generowanie prawdopodobieństw
+  const originalProb = Math.random() * 0.35 + 0.55; // 0.55-0.9
+  const scamProb = Math.random() * 0.15;
+  const replicaProb = Math.max(0, 1 - originalProb - scamProb);
+
+  const normalized = originalProb + scamProb + replicaProb;
+  const finalOriginal = originalProb / normalized;
+  const finalScam = scamProb / normalized;
+  const finalReplica = replicaProb / normalized;
+
+  const maxProb = Math.max(finalOriginal, finalScam, finalReplica);
+  const sortedProbs = [finalOriginal, finalScam, finalReplica].sort((a, b) => b - a);
+  const margin = sortedProbs[0] - sortedProbs[1];
+
+  let verdict: 'ORIGINAL' | 'SCAM' | 'REPLICA' | 'UNCERTAIN' = 'UNCERTAIN';
+  if (maxProb >= 0.6 && margin >= 0.15) {
+    if (finalOriginal === maxProb) verdict = 'ORIGINAL';
+    else if (finalScam === maxProb) verdict = 'SCAM';
+    else verdict = 'REPLICA';
+  }
+
+  return {
+    status: 'success',
+    url: payload.url,
+    title: titles[platform as keyof typeof titles],
+    platform: platform,
+    total_images_available: totalAvailable,
+    requested_max_images: maxImages,
+    image_count_used: imagesUsed,
+    original_probability: finalOriginal,
+    scam_probability: finalScam,
+    replica_probability: finalReplica,
+    verdict: verdict,
+    confidence: maxProb,
+    margin: margin,
+  };
+
+  // PRAWDZIWE WYWOŁANIE API (wyłączone)
+  // const formData = new FormData();
+  // formData.append('url', payload.url);
+  //
+  // if (payload.max_images !== undefined) {
+  //   formData.append('max_images', payload.max_images.toString());
+  // }
+  //
+  // const response = await fetch(`${AI_API_BASE_URL}/validate_url`, {
+  //   method: 'POST',
+  //   body: formData,
+  // });
+  //
+  // if (!response.ok) {
+  //   const error = await response.json().catch(() => ({}));
+  //   throw new ApiError(error.error || 'URL validation failed', response.status, error);
+  // }
+  //
+  // return response.json() as Promise<AIValidateUrlResponse>;
+}
+
+/**
+ * Health check AI API
+ *
+ * MOCK: Backend AI obecnie niedostępny - zwraca mock status
+ */
+export async function checkAIApiHealth(): Promise<{ status: string; message: string }> {
+  // MOCK: Symulacja sprawdzenia statusu
+  await new Promise((resolve) => setTimeout(resolve, 500));
+
+  return {
+    status: 'ok',
+    message: 'AI API running (MOCK MODE)',
+  };
+
+  // PRAWDZIWE WYWOŁANIE API (wyłączone)
+  // const response = await fetch(`${AI_API_BASE_URL}/health`);
+  //
+  // if (!response.ok) {
+  //   throw new ApiError('AI API health check failed', response.status);
+  // }
+  //
+  // return response.json();
 }
 
 export const api = {
@@ -465,8 +782,13 @@ export const api = {
   getAuctionOpinions,
   createOpinion,
   voteOpinion,
-  voteAuction,
+  // voteAuction, // Not in API documentation
   getStoredToken,
   storeToken,
   clearStoredToken,
+  // AI API
+  predictAuctionAuthenticity,
+  predictAuctionAuthenticityEnsemble,
+  validateAuctionFromUrl,
+  checkAIApiHealth,
 };

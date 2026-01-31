@@ -1,4 +1,4 @@
-import { Suspense, use, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,6 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  useAuctionById,
+  useAuctionOpinions,
+  useCreateOpinion,
+  // useVoteAuction, // Not available in API
+  useVoteOpinion,
+} from '@/hooks/useApiQueries';
 import {
   ArrowLeft,
   CheckCircle2,
@@ -31,8 +38,9 @@ import {
   ShieldCheck,
   Globe,
   Tag,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
-import { api, ApiError, type Auction, type Opinion } from '@/services/api';
 
 const FALLBACK_GALLERY = [
   'https://images.unsplash.com/photo-1590845947698-8924d7409b56?w=800&auto=format&fit=crop&q=60',
@@ -41,31 +49,6 @@ const FALLBACK_GALLERY = [
 ];
 
 const PENDING_STATUSES = new Set(['pending', 'pending_ai', 'needs_human_verification', 'disputed']);
-
-type AuctionResource = {
-  auctionPromise: Promise<Auction | null>;
-  opinionsPromise: Promise<Opinion[]>;
-};
-
-const auctionResourceCache = new Map<string, AuctionResource>();
-
-function getAuctionResource(auctionId: number, refreshKey: number): AuctionResource {
-  const cacheKey = `${auctionId}:${refreshKey}`;
-
-  if (!auctionResourceCache.has(cacheKey)) {
-    const auctionPromise = api.getAuctionById(auctionId).catch((error) => {
-      if (error instanceof ApiError && error.status === 404) {
-        return null;
-      }
-      throw error;
-    });
-
-    const opinionsPromise = api.getAuctionOpinions(auctionId);
-    auctionResourceCache.set(cacheKey, { auctionPromise, opinionsPromise });
-  }
-
-  return auctionResourceCache.get(cacheKey)!;
-}
 
 function PageSkeleton() {
   return (
@@ -106,11 +89,7 @@ export function AuctionDetails() {
     return <NotFoundBlock />;
   }
 
-  return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AuctionDetailsContent auctionId={auctionId} />
-    </Suspense>
-  );
+  return <AuctionDetailsContent auctionId={auctionId} />;
 }
 
 function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
@@ -119,18 +98,24 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [commentError, setCommentError] = useState<string | null>(null);
-  const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [isCommentPending, startCommentTransition] = useTransition();
-  const [isVoting, startVoteTransition] = useTransition();
+  const [isReevaluating, setIsReevaluating] = useState(false);
+  const [reevaluationError, setReevaluationError] = useState<string | null>(null);
+  // const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null); // Not used - auction voting disabled
   const [opinionVoteState, setOpinionVoteState] = useState<Record<number, 'up' | 'down' | null>>({});
   const [opinionVoteError, setOpinionVoteError] = useState<string | null>(null);
 
-  const resource = getAuctionResource(auctionId, refreshKey);
-  const auction = use(resource.auctionPromise);
-  const opinions = use(resource.opinionsPromise);
+  // React Query hooks
+  const { data: auction, isLoading: auctionLoading, error: auctionError } = useAuctionById(auctionId);
+  const { data: opinions = [], isLoading: opinionsLoading } = useAuctionOpinions(auctionId);
+  const createOpinionMutation = useCreateOpinion();
+  // const voteAuctionMutation = useVoteAuction(); // Not available in API
+  const voteOpinionMutation = useVoteOpinion();
 
-  if (!auction) {
+  if (auctionLoading || opinionsLoading) {
+    return <PageSkeleton />;
+  }
+
+  if (auctionError || !auction) {
     return <NotFoundBlock />;
   }
 
@@ -181,54 +166,91 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
 
     if (!user || !token) {
       setCommentError('Zaloguj się, aby dodać opinię.');
-
       return;
     }
 
-    startCommentTransition(async () => {
-      try {
-        setCommentError(null);
-        await api.createOpinion(auction.id, newComment.trim());
-        setNewComment('');
-        setRefreshKey((prev) => prev + 1);
-      } catch (error) {
-        setCommentError(error instanceof Error ? error.message : 'Nie udało się dodać komentarza');
+    createOpinionMutation.mutate(
+      { auctionId: auction.id, content: newComment.trim(), verdict: 'uncertain' },
+      {
+        onSuccess: () => {
+          setNewComment('');
+          setCommentError(null);
+        },
+        onError: (error) => {
+          setCommentError(error instanceof Error ? error.message : 'Nie udało się dodać komentarza');
+        },
       }
-    });
+    );
   };
 
-  const handleVote = (type: 'authentic' | 'fake') => {
-    if (!user || !token || votingState === type || !isPendingAuction) return;
+  // Note: Auction voting not available in API
+  // const handleVote = (type: 'authentic' | 'fake') => {
+  //   if (!user || !token || votingState === type || !isPendingAuction) return;
+  //
+  //   voteAuctionMutation.mutate(
+  //     { auctionId: auction.id, voteType: type },
+  //     {
+  //       onSuccess: () => {
+  //         setVotingState(type);
+  //       },
+  //       onError: (error) => {
+  //         console.error('Failed to vote', error);
+  //       },
+  //     }
+  //   );
+  // };
 
-    startVoteTransition(async () => {
-      try {
-        await api.voteAuction(auction.id, type);
-        setVotingState(type);
-        setRefreshKey((prev) => prev + 1);
-      } catch (error) {
-        console.error('Failed to vote', error);
-      }
-    });
-  };
-
-  const handleOpinionVote = async (opinionId: number, direction: 'up' | 'down') => {
+  const handleOpinionVote = (opinionId: number, direction: 'up' | 'down') => {
     if (!user || !token) {
       setOpinionVoteError('Zaloguj się, aby oceniać opinie.');
-
       return;
     }
 
     setOpinionVoteError(null);
     setOpinionVoteState((prev) => ({ ...prev, [opinionId]: direction }));
 
+    voteOpinionMutation.mutate(
+      {
+        opinionId,
+        payload: { vote_type: direction === 'up' ? 'upvote' : 'downvote' },
+        auctionId: auction.id,
+      },
+      {
+        onError: (error) => {
+          const message = error instanceof Error ? error.message : 'Nie udało się zarejestrować głosu';
+          setOpinionVoteError(message);
+        },
+        onSettled: () => {
+          setOpinionVoteState((prev) => ({ ...prev, [opinionId]: null }));
+        },
+      }
+    );
+  };
+
+  const handleReevaluateAI = async () => {
+    if (!auction.external_link) {
+      setReevaluationError('Brak linku do aukcji - nie można wykonać ponownej oceny');
+      return;
+    }
+
+    setIsReevaluating(true);
+    setReevaluationError(null);
+
     try {
-      await api.voteOpinion(opinionId, { vote_type: direction === 'up' ? 1 : -1 });
-      setRefreshKey((prev) => prev + 1);
+      const { validateAuctionFromUrl } = await import('@/services/api');
+      const result = await validateAuctionFromUrl({ url: auction.external_link, max_images: 5 });
+
+      if (result.status === 'success') {
+        // Refetch auction to get updated AI scores
+        window.location.reload();
+      } else {
+        setReevaluationError(result.error || 'Nie udało się wykonać ponownej oceny');
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nie udało się zarejestrować głosu';
-      setOpinionVoteError(message);
+      console.error('Error reevaluating auction:', error);
+      setReevaluationError(error instanceof Error ? error.message : 'Wystąpił błąd');
     } finally {
-      setOpinionVoteState((prev) => ({ ...prev, [opinionId]: null }));
+      setIsReevaluating(false);
     }
   };
 
@@ -408,9 +430,9 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                       type="button"
                       size="sm"
                       onClick={handleAddComment}
-                      disabled={!newComment.trim() || isCommentPending || !user}
+                      disabled={!newComment.trim() || createOpinionMutation.isPending || !user}
                     >
-                      {isCommentPending ? (
+                      {createOpinionMutation.isPending ? (
                         'Wysyłanie...'
                       ) : (
                         <>
@@ -559,6 +581,12 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                 </div>
               )}
 
+              {/* Note: Auction voting temporarily disabled - not available in current API */}
+              <div className="rounded-md border border-blue-200 bg-blue-50 text-blue-900 text-sm p-3">
+                Głosowanie na aukcje jest obecnie niedostępne. Możesz jednak głosować na opinie ekspertów poniżej.
+              </div>
+
+              {/* Disabled voting UI - kept for future implementation
               <div className="grid grid-cols-2 gap-4 text-center">
                 <div className="border rounded-lg p-4">
                   <p className="text-sm text-muted-foreground">Autentyk</p>
@@ -567,8 +595,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     variant="secondary"
                     size="sm"
                     className="mt-3 w-full"
-                    onClick={() => handleVote('authentic')}
-                    disabled={!isPendingAuction || votingState !== null || isVoting || !user}
+                    disabled
                   >
                     <ThumbsUp className="mr-2 h-4 w-4" /> Głosuj
                   </Button>
@@ -580,21 +607,47 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     variant="destructive"
                     size="sm"
                     className="mt-3 w-full"
-                    onClick={() => handleVote('fake')}
-                    disabled={!isPendingAuction || votingState !== null || isVoting || !user}
+                    disabled
                   >
                     <ThumbsDown className="mr-2 h-4 w-4" /> Zgłoś
                   </Button>
                 </div>
               </div>
+              */}
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Status AI</CardTitle>
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  Analiza AI
+                </span>
+                {auction.external_link && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleReevaluateAI}
+                    disabled={isReevaluating}
+                    className="h-8 px-2"
+                  >
+                    {isReevaluating ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
+                        <span className="text-xs">Ocenianie...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-3 w-3 mr-1" />
+                        <span className="text-xs">Przeocen</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex items-center gap-3">
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   {score >= 80 ? (
@@ -605,14 +658,39 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     <ShieldAlert className="h-6 w-6 text-red-500" />
                   )}
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Wskaźnik AI</p>
+                <div className="flex-1">
+                  <p className="text-sm text-muted-foreground">Wskaźnik autentyczności</p>
                   <p className="text-2xl font-bold">{score}%</p>
                 </div>
               </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Pewność oceny</span>
+                  <span className="font-medium">{score}%</span>
+                </div>
+                <Progress value={score} className="h-2" />
+              </div>
+
               {auction.ai_uncertainty_message && (
-                <p className="text-sm text-muted-foreground mt-4">{auction.ai_uncertainty_message}</p>
+                <div className="rounded-md border bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    <strong>Uwaga AI:</strong> {auction.ai_uncertainty_message}
+                  </p>
+                </div>
               )}
+
+              {reevaluationError && (
+                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
+                  <p className="text-xs text-destructive">{reevaluationError}</p>
+                </div>
+              )}
+
+              <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
+                <p>• Analiza oparta na obrazach i opisie</p>
+                <p>• Model AI przeszkolony na aukcjach antyków</p>
+                <p>• Wyniki mają charakter pomocniczy</p>
+              </div>
             </CardContent>
           </Card>
 

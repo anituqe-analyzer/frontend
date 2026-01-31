@@ -1,37 +1,36 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Search, Plus, Loader2, ArrowLeft } from 'lucide-react';
-import { api } from '@/services/api';
-
-function AddAuctionSkeleton() {
-  return (
-    <div className="w-full max-w-[1000px] mx-auto px-4 md:px-8 py-8 animate-pulse">
-      <div className="h-10 w-32 bg-muted/60 rounded mb-6" />
-      <div className="h-[600px] rounded-2xl border bg-muted/30" />
-    </div>
-  );
-}
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Search, Plus, Loader2, ArrowLeft, Sparkles, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
+import { useCategories, useCreateAuction } from '@/hooks/useApiQueries';
+import {
+  validateAuctionFromUrl,
+  predictAuctionAuthenticityEnsemble,
+  type AIValidateUrlResponse,
+  type AIEnsemblePredictResponse,
+} from '@/services/api';
 
 export function AddAuction() {
-  const [ searchParams ] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const initialUrl = searchParams.get('url') ?? '';
   const navigate = useNavigate();
 
-  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
-    queryKey: ['categories'],
-    queryFn: api.getCategories,
-  });
+  const { data: categories = [], isLoading: categoriesLoading } = useCategories();
+  const createAuctionMutation = useCreateAuction();
 
-  const [ isSubmitting, setIsSubmitting ] = useState(false);
-  const [ isScraping, setIsScraping ] = useState(false);
-  const [ formData, setFormData ] = useState({
+  const [isScraping, setIsScraping] = useState(false);
+  const [isEvaluatingAI, setIsEvaluatingAI] = useState(false);
+  const [aiResult, setAiResult] = useState<AIValidateUrlResponse | AIEnsemblePredictResponse | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [formData, setFormData] = useState({
     external_link: initialUrl,
     title: '',
     description_text: '',
@@ -40,30 +39,36 @@ export function AddAuction() {
     category_id: '',
   });
 
-  const handleScrapeData = useCallback((url: string) => {
+  const handleScrapeData = useCallback(async (url: string) => {
     setIsScraping(true);
-    setTimeout(() => {
-      if (url.includes('allegro')) {
+    setIsEvaluatingAI(true);
+    setAiError(null);
+    setAiResult(null);
+
+    try {
+      // Wywołanie AI API do scrapowania i oceny
+      const result = await validateAuctionFromUrl({ url, max_images: 5 });
+
+      if (result.status === 'success') {
+        setAiResult(result);
+
+        // Wypełnienie formularza danymi ze scrapowania
         setFormData((prev) => ({
           ...prev,
-          title: 'Przykładowy przedmiot z Allegro',
-          description_text: 'To jest automatycznie pobrany opis z aukcji Allegro...',
-          price: '1250',
-          currency: 'PLN',
-          category_id: '1',
+          title: result.title || prev.title,
+          description_text: `Platforma: ${result.platform}\n\nAutomatycznie pobrane z: ${url}`,
+          // Możesz też próbować wyciągnąć cenę, jeśli scraper ją zwraca
         }));
-      } else if (url.includes('olx')) {
-        setFormData((prev) => ({
-          ...prev,
-          title: 'Znalezisko z OLX',
-          description_text: 'Opis pobrany z OLX...',
-          price: '450',
-          currency: 'PLN',
-          category_id: '6',
-        }));
+      } else {
+        setAiError(result.error || 'Nie udało się przetworzyć aukcji');
       }
+    } catch (error) {
+      console.error('Error scraping auction:', error);
+      setAiError(error instanceof Error ? error.message : 'Wystąpił błąd podczas scrapowania');
+    } finally {
       setIsScraping(false);
-    }, 1500);
+      setIsEvaluatingAI(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -71,7 +76,7 @@ export function AddAuction() {
       setFormData((prev) => ({ ...prev, external_link: initialUrl }));
       handleScrapeData(initialUrl);
     }
-  }, [ initialUrl, handleScrapeData ]);
+  }, [initialUrl, handleScrapeData]);
 
   const handleInputChange = (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { id, value } = event.target;
@@ -84,22 +89,62 @@ export function AddAuction() {
     }
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSubmitting(true);
+  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      setUploadedImages(Array.from(files));
+      setAiResult(null);
+      setAiError(null);
+    }
+  };
+
+  const handleEvaluateImages = async () => {
+    if (uploadedImages.length === 0 || !formData.title) {
+      setAiError('Dodaj zdjęcia i wypełnij tytuł przed oceną');
+      return;
+    }
+
+    setIsEvaluatingAI(true);
+    setAiError(null);
+    setAiResult(null);
 
     try {
-      let platform = 'Manual';
+      const result = await predictAuctionAuthenticityEnsemble({
+        images: uploadedImages,
+        title: formData.title,
+        description: formData.description_text || '',
+      });
 
-      if (formData.external_link) {
-        try {
-          platform = new URL(formData.external_link).host;
-        } catch {
-          platform = 'Manual';
-        }
+      if (result.status === 'success') {
+        setAiResult(result);
+      } else {
+        setAiError(result.error || 'Nie udało się ocenić aukcji');
       }
-      const priceValue = formData.price ? parseFloat(formData.price) : undefined;
-      await api.createAuction({
+    } catch (error) {
+      console.error('Error evaluating images:', error);
+      setAiError(error instanceof Error ? error.message : 'Wystąpił błąd podczas oceny');
+    } finally {
+      setIsEvaluatingAI(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    let platform = 'Manual';
+
+    if (formData.external_link) {
+      try {
+        platform = new URL(formData.external_link).host;
+      } catch {
+        platform = 'Manual';
+      }
+    }
+
+    const priceValue = formData.price ? parseFloat(formData.price) : undefined;
+
+    createAuctionMutation.mutate(
+      {
         external_link: formData.external_link,
         title: formData.title,
         description_text: formData.description_text,
@@ -107,14 +152,18 @@ export function AddAuction() {
         currency: formData.currency,
         category_id: parseInt(formData.category_id, 10),
         platform,
-      });
-      alert('Zgłoszenie zostało dodane!');
-      navigate('/dashboard');
-    } catch (error) {
-      console.error('Error creating auction:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
+      },
+      {
+        onSuccess: () => {
+          alert('Zgłoszenie zostało dodane!');
+          navigate('/dashboard');
+        },
+        onError: (error) => {
+          console.error('Error creating auction:', error);
+          alert('Wystąpił błąd podczas dodawania zgłoszenia.');
+        },
+      }
+    );
   };
 
   return (
@@ -150,7 +199,130 @@ export function AddAuction() {
                   Pobierz dane
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Obsługiwane platformy: Allegro, OLX, eBay. Automatycznie scrapuje i ocenia aukcję przez AI.
+              </p>
             </div>
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">lub</span>
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="images">Upload zdjęć do oceny AI</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="images"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageUpload}
+                  className="cursor-pointer"
+                />
+                <Button
+                  variant="secondary"
+                  onClick={handleEvaluateImages}
+                  disabled={isEvaluatingAI || uploadedImages.length === 0 || !formData.title}
+                >
+                  {isEvaluatingAI ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  Oceń AI
+                </Button>
+              </div>
+              {uploadedImages.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Wybrano {uploadedImages.length} {uploadedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}
+                </p>
+              )}
+            </div>
+
+            {aiResult && (
+              <Card className="border-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-primary" />
+                    Wynik oceny AI
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Werdykt:</span>
+                    <Badge
+                      variant={
+                        aiResult.verdict === 'ORIGINAL'
+                          ? 'default'
+                          : aiResult.verdict === 'UNCERTAIN'
+                            ? 'secondary'
+                            : 'destructive'
+                      }
+                      className="text-sm px-3 py-1"
+                    >
+                      {aiResult.verdict === 'ORIGINAL' && <CheckCircle className="mr-1 h-4 w-4" />}
+                      {aiResult.verdict === 'UNCERTAIN' && <AlertCircle className="mr-1 h-4 w-4" />}
+                      {(aiResult.verdict === 'SCAM' || aiResult.verdict === 'REPLICA') && (
+                        <XCircle className="mr-1 h-4 w-4" />
+                      )}
+                      {aiResult.verdict === 'ORIGINAL' && 'Autentyczny'}
+                      {aiResult.verdict === 'SCAM' && 'Oszustwo'}
+                      {aiResult.verdict === 'REPLICA' && 'Replika'}
+                      {aiResult.verdict === 'UNCERTAIN' && 'Niepewny'}
+                    </Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span>Autentyczność</span>
+                      <span className="font-medium">{Math.round((aiResult.original_probability || 0) * 100)}%</span>
+                    </div>
+                    <Progress value={(aiResult.original_probability || 0) * 100} className="h-2" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span>Oszustwo</span>
+                      <span className="font-medium">{Math.round((aiResult.scam_probability || 0) * 100)}%</span>
+                    </div>
+                    <Progress value={(aiResult.scam_probability || 0) * 100} className="h-2" />
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-xs">
+                      <span>Replika</span>
+                      <span className="font-medium">{Math.round((aiResult.replica_probability || 0) * 100)}%</span>
+                    </div>
+                    <Progress value={(aiResult.replica_probability || 0) * 100} className="h-2" />
+                  </div>
+                  <div className="flex items-center justify-between pt-2 border-t">
+                    <span className="text-xs text-muted-foreground">Pewność</span>
+                    <span className="text-sm font-semibold">{Math.round((aiResult.confidence || 0) * 100)}%</span>
+                  </div>
+                  {'image_count_used' in aiResult && (
+                    <p className="text-xs text-muted-foreground">
+                      Przeanalizowano {aiResult.image_count_used} z {aiResult.total_images_available} dostępnych zdjęć
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {aiError && (
+              <Card className="border-destructive">
+                <CardContent className="pt-6">
+                  <div className="flex items-start gap-2 text-destructive">
+                    <AlertCircle className="h-5 w-5 mt-0.5" />
+                    <div>
+                      <p className="font-medium">Błąd oceny AI</p>
+                      <p className="text-sm">{aiError}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
@@ -224,8 +396,12 @@ export function AddAuction() {
             </div>
           </CardContent>
           <CardFooter className="flex justify-end">
-            <Button type="submit" size="lg" disabled={isSubmitting || !formData.title || !formData.category_id}>
-              {isSubmitting ? (
+            <Button
+              type="submit"
+              size="lg"
+              disabled={createAuctionMutation.isPending || !formData.title || !formData.category_id}
+            >
+              {createAuctionMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Przetwarzanie...

@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2, XCircle, Clock, Loader2, ShieldAlert, ShieldCheck } from 'lucide-react';
-import { api, type Auction } from '@/services/api';
 import { useAuth } from '@/hooks/useAuth';
+import { useAuctions } from '@/hooks/useApiQueries';
 
 type StatusConfig = { label: string; className: string };
 
@@ -62,49 +62,31 @@ function ScorePill({ score }: { score: number | null }) {
 
 export function Dashboard() {
   const { user } = useAuth();
-  const [myOffers, setMyOffers] = useState<Auction[]>([]);
-  const [expertQueue, setExpertQueue] = useState<Auction[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data: allAuctions = [], isLoading, error: queryError } = useAuctions({ perPage: 100 });
+
   const isExpert = useMemo(() => user?.role === 'expert' || user?.role === 'admin', [user?.role]);
+
+  const myOffers = useMemo(
+    () => allAuctions.filter((auction) => auction.submitted_by_user_id === user?.id),
+    [allAuctions, user?.id]
+  );
+
+  const expertQueue = useMemo(
+    () => allAuctions.filter((auction) => PENDING_STATUSES.has(auction.verification_status ?? 'pending')),
+    [allAuctions]
+  );
+
   const awaitingOffers = useMemo(
     () => myOffers.filter((offer) => PENDING_STATUSES.has(offer.verification_status ?? 'pending')),
     [myOffers]
   );
+
   const reviewedOffers = useMemo(
     () => myOffers.filter((offer) => !PENDING_STATUSES.has(offer.verification_status ?? 'pending')),
     [myOffers]
   );
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function fetchDashboardData() {
-      if (!user?.id) return;
-      setIsLoading(true);
-      setError(null);
-
-      try {
-        const auctions = await api.getAuctions({ perPage: 100 });
-        if (!isMounted) return;
-        setMyOffers(auctions.filter((auction) => auction.submitted_by_user_id === user.id));
-        setExpertQueue(auctions.filter((auction) => PENDING_STATUSES.has(auction.verification_status ?? 'pending')));
-      } catch (err) {
-        if (!isMounted) return;
-        const message = err instanceof Error ? err.message : 'Nie udało się pobrać danych panelu';
-        setError(message);
-      } finally {
-        if (!isMounted) return;
-        setIsLoading(false);
-      }
-    }
-
-    fetchDashboardData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id]);
+  const error = queryError instanceof Error ? queryError.message : null;
 
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-8">
