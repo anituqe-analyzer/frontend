@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Navbar } from './components/Navbar';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Home } from './pages/Home';
+import { About } from './pages/About';
 import { Dashboard } from './pages/Dashboard';
 import { ExpertTaskDetails } from './pages/ExpertTaskDetails';
 import { AddAuction } from './pages/AddAuction';
@@ -30,18 +31,19 @@ function App() {
         <main className="flex-1">
           <ErrorBoundary>
             <Routes>
-            <Route path="/" element={<Home />} />
-            <Route
-              path="/dashboard"
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/add-auction" element={<AddAuction />} />
-            <Route path="/auction/:id" element={<AuctionDetails />} />
-            <Route path="/expert/task/:id" element={<ExpertTaskDetails />} />
+              <Route path="/" element={<Home />} />
+              <Route path="/o-projekcie" element={<About />} />
+              <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute>
+                    <Dashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="/add-auction" element={<AddAuction />} />
+              <Route path="/auction/:id" element={<AuctionDetails />} />
+              <Route path="/expert/task/:id" element={<ExpertTaskDetails />} />
             </Routes>
           </ErrorBoundary>
         </main>

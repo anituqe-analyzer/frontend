@@ -210,9 +210,6 @@ export function Dashboard() {
                               </div>
                               <StatusBadge status={offer.verification_status} />
                             </div>
-                            <p className="text-xs font-semibold text-red-600">
-                              Proces weryfikacji tego zgłoszenia został zamknięty – głosowanie jest niedostępne.
-                            </p>
                           </div>
                         ))}
                       </div>

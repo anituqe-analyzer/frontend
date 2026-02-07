@@ -73,6 +73,47 @@ function derivePlatform(link?: string | null): string | null {
   }
 }
 
+const AUCTION_VOTES_STORAGE_KEY = 'antique:auctionVotes';
+
+type StoredAuctionVotes = Record<string, { authentic: number; fake: number }>;
+
+function readStoredAuctionVotes(): StoredAuctionVotes {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const raw = window.localStorage.getItem(AUCTION_VOTES_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as StoredAuctionVotes;
+    if (!parsed || typeof parsed !== 'object') return {};
+    return parsed;
+  } catch (error) {
+    console.warn('Nie udało się odczytać głosów aukcji z localStorage', error);
+    return {};
+  }
+}
+
+function writeStoredAuctionVotes(data: StoredAuctionVotes) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(AUCTION_VOTES_STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.warn('Nie udało się zapisać głosów aukcji do localStorage', error);
+  }
+}
+
+function getStoredAuctionVotes(auctionId: number): { authentic: number; fake: number } | null {
+  const map = readStoredAuctionVotes();
+  const entry = map[String(auctionId)];
+
+  if (!entry) return null;
+
+  return {
+    authentic: typeof entry.authentic === 'number' ? entry.authentic : 0,
+    fake: typeof entry.fake === 'number' ? entry.fake : 0,
+  };
+}
+
 const FALLBACK_IMAGES = [
   'https://images.unsplash.com/photo-1589118949245-7d38baf380d6?w=800&auto=format&fit=crop&q=60',
   'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?w=800&auto=format&fit=crop&q=60',
@@ -81,7 +122,18 @@ const FALLBACK_IMAGES = [
 
 function normalizeAuction(raw: BackendAuction): Auction {
   const price = parseNumber(raw.price);
+  const normalizedAiScore =
+    typeof raw.ai_score_authenticity === 'number'
+      ? Math.max(
+          0,
+          Math.min(1, raw.ai_score_authenticity > 1 ? raw.ai_score_authenticity / 100 : raw.ai_score_authenticity)
+        )
+      : null;
   const imageGallery = raw.images && raw.images.length > 0 ? raw.images : FALLBACK_IMAGES;
+  const storedVotes = getStoredAuctionVotes(raw.id);
+  const votesAuthentic = storedVotes?.authentic ?? null;
+  const votesFake = storedVotes?.fake ?? null;
+  const netVotes = votesAuthentic !== null || votesFake !== null ? (votesAuthentic ?? 0) - (votesFake ?? 0) : null;
 
   return {
     id: raw.id,
@@ -91,7 +143,7 @@ function normalizeAuction(raw: BackendAuction): Auction {
     currency: raw.currency ?? 'USD',
     external_link: raw.external_link,
     verification_status: raw.verification_status,
-    ai_score_authenticity: raw.ai_score_authenticity,
+    ai_score_authenticity: normalizedAiScore,
     ai_uncertainty_message: raw.ai_uncertainty_message,
     category_id: raw.category?.id ?? null,
     category_name: raw.category?.name ?? null,
@@ -102,9 +154,9 @@ function normalizeAuction(raw: BackendAuction): Auction {
     image: imageGallery[0],
     image_gallery: imageGallery,
     platform: derivePlatform(raw.external_link) ?? raw.category?.name ?? null,
-    votes: null,
-    votes_authentic: null,
-    votes_fake: null,
+    votes: netVotes,
+    votes_authentic: votesAuthentic,
+    votes_fake: votesFake,
     timeLeft: null,
   };
 }
@@ -218,7 +270,7 @@ export interface OpinionAuction {
   title: string;
 }
 
-export type OpinionVerdict = 'authentic' | 'fake' | 'uncertain';
+export type OpinionVerdict = 'authentic' | 'fake' | 'unsure';
 
 export type UserRole = 'user' | 'expert' | 'admin';
 
@@ -264,7 +316,7 @@ export interface VoteResponse {
 }
 
 export interface OpinionVotePayload {
-  vote_type: 'upvote' | 'downvote';
+  vote_type: -1 | 1;
 }
 
 export async function login(payload: LoginPayload) {
@@ -413,7 +465,7 @@ export async function getAuctionOpinions(auctionId: number) {
   return [];
 }
 
-export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'uncertain') {
+export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'unsure') {
   const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/opinions`, {
     method: 'POST',
     headers: getAuthHeadersWithContentType(),
@@ -452,25 +504,24 @@ export async function voteOpinion(opinionId: number, payload: OpinionVotePayload
   return response.json();
 }
 
-// Note: Auction voting endpoint not documented in API
-// export async function voteAuction(auctionId: number, voteType: 'authentic' | 'fake'): Promise<VoteResponse> {
-//   const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/vote`, {
-//     method: 'POST',
-//     headers: getAuthHeadersWithContentType(),
-//     body: JSON.stringify({
-//       vote: {
-//         vote_type: voteType === 'authentic' ? 1 : -1,
-//       },
-//     }),
-//   });
-//
-//   if (!response.ok) {
-//     const error = await response.json().catch(() => ({}));
-//     throw new ApiError(error.message || 'Failed to vote on auction', response.status, error);
-//   }
-//
-//   return response.json() as Promise<VoteResponse>;
-// }
+export async function voteAuction(auctionId: number, voteType: 'authentic' | 'fake'): Promise<VoteResponse> {
+  const map = readStoredAuctionVotes();
+  const key = String(auctionId);
+  const current = map[key] ?? { authentic: 0, fake: 0 };
+
+  const next = {
+    authentic: current.authentic + (voteType === 'authentic' ? 1 : 0),
+    fake: current.fake + (voteType === 'fake' ? 1 : 0),
+  };
+
+  map[key] = next;
+  writeStoredAuctionVotes(map);
+
+  return {
+    votes_authentic: next.authentic,
+    votes_fake: next.fake,
+  };
+}
 
 // ==============================================
 // AI API - Auction Authenticity Evaluation
@@ -520,6 +571,13 @@ export interface AIValidateUrlPayload {
 
 export interface AIValidateUrlResponse {
   status: 'success' | 'error';
+  id?: number;
+  auction_id?: number;
+  success?: boolean;
+  validation_result?: {
+    success?: boolean;
+    auction?: BackendAuction | null;
+  };
   url?: string;
   title?: string;
   platform?: string;
@@ -535,6 +593,8 @@ export interface AIValidateUrlResponse {
   error?: string;
   traceback?: string;
 }
+
+const validateUrlInFlight = new Map<string, Promise<AIValidateUrlResponse>>();
 
 /**
  * Ocena autentyczności aukcji na podstawie pojedynczego zdjęcia
@@ -665,87 +725,43 @@ export async function predictAuctionAuthenticityEnsemble(
 /**
  * Walidacja aukcji bezpośrednio z URL (scraping + ocena AI)
  * Obsługuje platformy: Allegro, OLX, eBay
- *
- * MOCK: Backend AI obecnie niedostępny - zwraca przykładowe dane
  */
 export async function validateAuctionFromUrl(payload: AIValidateUrlPayload): Promise<AIValidateUrlResponse> {
-  // MOCK: Symulacja opóźnienia API (scraping + analiza)
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+  const key = `${payload.url}::${payload.max_images ?? ''}`;
+  const existing = validateUrlInFlight.get(key);
 
-  // MOCK: Wykrycie platformy z URL
-  let platform = 'nieznana';
-  if (payload.url.includes('allegro')) platform = 'Allegro';
-  else if (payload.url.includes('olx')) platform = 'OLX';
-  else if (payload.url.includes('ebay')) platform = 'eBay';
-
-  // MOCK: Generowanie tytułu na podstawie platformy
-  const titles = {
-    Allegro: 'Antyczny zegar ścienny z XIX wieku',
-    OLX: 'Stara porcelanowa figurka',
-    eBay: 'Vintage pocket watch',
-    nieznana: 'Przedmiot antykwaryczny',
-  };
-
-  const maxImages = payload.max_images || 3;
-  const totalAvailable = Math.floor(Math.random() * 5) + 3; // 3-7 zdjęć
-  const imagesUsed = Math.min(maxImages, totalAvailable);
-
-  // MOCK: Generowanie prawdopodobieństw
-  const originalProb = Math.random() * 0.35 + 0.55; // 0.55-0.9
-  const scamProb = Math.random() * 0.15;
-  const replicaProb = Math.max(0, 1 - originalProb - scamProb);
-
-  const normalized = originalProb + scamProb + replicaProb;
-  const finalOriginal = originalProb / normalized;
-  const finalScam = scamProb / normalized;
-  const finalReplica = replicaProb / normalized;
-
-  const maxProb = Math.max(finalOriginal, finalScam, finalReplica);
-  const sortedProbs = [finalOriginal, finalScam, finalReplica].sort((a, b) => b - a);
-  const margin = sortedProbs[0] - sortedProbs[1];
-
-  let verdict: 'ORIGINAL' | 'SCAM' | 'REPLICA' | 'UNCERTAIN' = 'UNCERTAIN';
-  if (maxProb >= 0.6 && margin >= 0.15) {
-    if (finalOriginal === maxProb) verdict = 'ORIGINAL';
-    else if (finalScam === maxProb) verdict = 'SCAM';
-    else verdict = 'REPLICA';
+  if (existing) {
+    return existing;
   }
 
-  return {
-    status: 'success',
-    url: payload.url,
-    title: titles[platform as keyof typeof titles],
-    platform: platform,
-    total_images_available: totalAvailable,
-    requested_max_images: maxImages,
-    image_count_used: imagesUsed,
-    original_probability: finalOriginal,
-    scam_probability: finalScam,
-    replica_probability: finalReplica,
-    verdict: verdict,
-    confidence: maxProb,
-    margin: margin,
-  };
+  const request = (async () => {
+    const endpoint = new URL(`${API_BASE_URL}/validate_url`);
+    endpoint.searchParams.set('auction_url', payload.url);
 
-  // PRAWDZIWE WYWOŁANIE API (wyłączone)
-  // const formData = new FormData();
-  // formData.append('url', payload.url);
-  //
-  // if (payload.max_images !== undefined) {
-  //   formData.append('max_images', payload.max_images.toString());
-  // }
-  //
-  // const response = await fetch(`${AI_API_BASE_URL}/validate_url`, {
-  //   method: 'POST',
-  //   body: formData,
-  // });
-  //
-  // if (!response.ok) {
-  //   const error = await response.json().catch(() => ({}));
-  //   throw new ApiError(error.error || 'URL validation failed', response.status, error);
-  // }
-  //
-  // return response.json() as Promise<AIValidateUrlResponse>;
+    if (payload.max_images !== undefined) {
+      endpoint.searchParams.set('max_images', String(payload.max_images));
+    }
+
+    const response = await fetch(endpoint.toString(), {
+      method: 'GET',
+      headers: getAuthHeaders(),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new ApiError(error.error || error.message || 'URL validation failed', response.status, error);
+    }
+
+    return response.json() as Promise<AIValidateUrlResponse>;
+  })();
+
+  validateUrlInFlight.set(key, request);
+
+  try {
+    return await request;
+  } finally {
+    validateUrlInFlight.delete(key);
+  }
 }
 
 /**
@@ -782,7 +798,7 @@ export const api = {
   getAuctionOpinions,
   createOpinion,
   voteOpinion,
-  // voteAuction, // Not in API documentation
+  voteAuction,
   getStoredToken,
   storeToken,
   clearStoredToken,

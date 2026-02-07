@@ -79,8 +79,8 @@ const TASK_DETAILS = {
 
 export function ExpertTaskDetails() {
   const { id } = useParams();
-  const [ selectedImageIndex, setSelectedImageIndex ] = useState(0);
-  const [ isLightboxOpen, setIsLightboxOpen ] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
 
   // In a real app, we would fetch data based on ID
   const task = TASK_DETAILS;

@@ -1,5 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type AuctionFilters, type CreateAuctionPayload, type OpinionVotePayload } from '@/services/api';
+import {
+  api,
+  type AIValidateUrlPayload,
+  type AuctionFilters,
+  type CreateAuctionPayload,
+  type OpinionVotePayload,
+} from '@/services/api';
 
 // Query hooks
 export function useCategories() {
@@ -54,7 +60,7 @@ export function useCreateOpinion() {
     }: {
       auctionId: number;
       content: string;
-      verdict?: 'authentic' | 'fake' | 'uncertain';
+      verdict?: 'authentic' | 'fake' | 'unsure';
     }) => api.createOpinion(auctionId, content, verdict),
     onSuccess: (_, variables) => {
       // Invalidate opinions for this auction
@@ -63,20 +69,19 @@ export function useCreateOpinion() {
   });
 }
 
-// Note: Auction voting not available in API
-// export function useVoteAuction() {
-//   const queryClient = useQueryClient();
-//
-//   return useMutation({
-//     mutationFn: ({ auctionId, voteType }: { auctionId: number; voteType: 'authentic' | 'fake' }) =>
-//       api.voteAuction(auctionId, voteType),
-//     onSuccess: (_, variables) => {
-//       // Invalidate auction data and auctions list
-//       queryClient.invalidateQueries({ queryKey: ['auction', variables.auctionId] });
-//       queryClient.invalidateQueries({ queryKey: ['auctions'] });
-//     },
-//   });
-// }
+export function useVoteAuction() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ auctionId, voteType }: { auctionId: number; voteType: 'authentic' | 'fake' }) =>
+      api.voteAuction(auctionId, voteType),
+    onSuccess: (_, variables) => {
+      // Invalidate auction data and auctions list
+      queryClient.invalidateQueries({ queryKey: ['auction', variables.auctionId] });
+      queryClient.invalidateQueries({ queryKey: ['auctions'] });
+    },
+  });
+}
 
 export function useVoteOpinion() {
   const queryClient = useQueryClient();
@@ -88,5 +93,11 @@ export function useVoteOpinion() {
       // Invalidate opinions for this auction
       queryClient.invalidateQueries({ queryKey: ['auction', variables.auctionId, 'opinions'] });
     },
+  });
+}
+
+export function useValidateAuctionFromUrl() {
+  return useMutation({
+    mutationFn: (payload: AIValidateUrlPayload) => api.validateAuctionFromUrl(payload),
   });
 }

@@ -11,11 +11,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useAuctionById,
   useAuctionOpinions,
   useCreateOpinion,
-  // useVoteAuction, // Not available in API
+  useValidateAuctionFromUrl,
+  useVoteAuction,
   useVoteOpinion,
 } from '@/hooks/useApiQueries';
 import {
@@ -97,10 +99,11 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [newComment, setNewComment] = useState('');
+  const [newVerdict, setNewVerdict] = useState<'authentic' | 'fake' | 'unsure'>('unsure');
   const [commentError, setCommentError] = useState<string | null>(null);
   const [isReevaluating, setIsReevaluating] = useState(false);
   const [reevaluationError, setReevaluationError] = useState<string | null>(null);
-  // const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null); // Not used - auction voting disabled
+  const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null);
   const [opinionVoteState, setOpinionVoteState] = useState<Record<number, 'up' | 'down' | null>>({});
   const [opinionVoteError, setOpinionVoteError] = useState<string | null>(null);
 
@@ -108,8 +111,10 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const { data: auction, isLoading: auctionLoading, error: auctionError } = useAuctionById(auctionId);
   const { data: opinions = [], isLoading: opinionsLoading } = useAuctionOpinions(auctionId);
   const createOpinionMutation = useCreateOpinion();
-  // const voteAuctionMutation = useVoteAuction(); // Not available in API
+  const validateUrlMutation = useValidateAuctionFromUrl();
+  const voteAuctionMutation = useVoteAuction();
   const voteOpinionMutation = useVoteOpinion();
+  const queryClient = useQueryClient();
 
   if (auctionLoading || opinionsLoading) {
     return <PageSkeleton />;
@@ -170,10 +175,11 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     }
 
     createOpinionMutation.mutate(
-      { auctionId: auction.id, content: newComment.trim(), verdict: 'uncertain' },
+      { auctionId: auction.id, content: newComment.trim(), verdict: newVerdict },
       {
         onSuccess: () => {
           setNewComment('');
+          setNewVerdict('unsure');
           setCommentError(null);
         },
         onError: (error) => {
@@ -183,22 +189,21 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     );
   };
 
-  // Note: Auction voting not available in API
-  // const handleVote = (type: 'authentic' | 'fake') => {
-  //   if (!user || !token || votingState === type || !isPendingAuction) return;
-  //
-  //   voteAuctionMutation.mutate(
-  //     { auctionId: auction.id, voteType: type },
-  //     {
-  //       onSuccess: () => {
-  //         setVotingState(type);
-  //       },
-  //       onError: (error) => {
-  //         console.error('Failed to vote', error);
-  //       },
-  //     }
-  //   );
-  // };
+  const handleVote = (type: 'authentic' | 'fake') => {
+    if (!user || !token || votingState === type || !isPendingAuction) return;
+
+    voteAuctionMutation.mutate(
+      { auctionId: auction.id, voteType: type },
+      {
+        onSuccess: () => {
+          setVotingState(type);
+        },
+        onError: (error) => {
+          console.error('Failed to vote', error);
+        },
+      }
+    );
+  };
 
   const handleOpinionVote = (opinionId: number, direction: 'up' | 'down') => {
     if (!user || !token) {
@@ -212,7 +217,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     voteOpinionMutation.mutate(
       {
         opinionId,
-        payload: { vote_type: direction === 'up' ? 'upvote' : 'downvote' },
+        payload: { vote_type: direction === 'up' ? 1 : -1 },
         auctionId: auction.id,
       },
       {
@@ -237,12 +242,11 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     setReevaluationError(null);
 
     try {
-      const { validateAuctionFromUrl } = await import('@/services/api');
-      const result = await validateAuctionFromUrl({ url: auction.external_link, max_images: 5 });
+      const result = await validateUrlMutation.mutateAsync({ url: auction.external_link, max_images: 5 });
 
       if (result.status === 'success') {
-        // Refetch auction to get updated AI scores
-        window.location.reload();
+        await queryClient.invalidateQueries({ queryKey: ['auction', auction.id] });
+        await queryClient.invalidateQueries({ queryKey: ['auctions'] });
       } else {
         setReevaluationError(result.error || 'Nie udało się wykonać ponownej oceny');
       }
@@ -424,6 +428,22 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                     className="min-h-20"
                     disabled={!user}
                   />
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="text-xs text-muted-foreground" htmlFor="opinion-verdict">
+                      Werdykt
+                    </label>
+                    <select
+                      id="opinion-verdict"
+                      className="flex h-9 w-full sm:w-48 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-xs ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                      value={newVerdict}
+                      onChange={(event) => setNewVerdict(event.target.value as 'authentic' | 'fake' | 'unsure')}
+                      disabled={!user}
+                    >
+                      <option value="authentic">Autentyk</option>
+                      <option value="fake">Falsyfikat</option>
+                      <option value="unsure">Niepewny</option>
+                    </select>
+                  </div>
                   {commentError && <p className="text-sm text-destructive">{commentError}</p>}
                   <div className="flex justify-end">
                     <Button
@@ -469,7 +489,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                         ? 'Autentyk'
                         : opinion.verdict === 'fake'
                           ? 'Falsyfikat'
-                          : 'Werdykt niejednoznaczny';
+                          : 'Niepewny';
                     const verdictClass =
                       opinion.verdict === 'authentic'
                         ? 'bg-green-100 text-green-800 border-green-200'
@@ -558,65 +578,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
             </CardContent>
           </Card>
 
-          <Card className="border-muted shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">Werdykt społeczności</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div>
-                  <p className="text-sm text-muted-foreground">Bilans głosów</p>
-                  <p className="text-3xl font-bold">{netVotes}</p>
-                </div>
-                <div className="flex-1">
-                  <div className="text-xs text-muted-foreground mb-1">Autentyczność AI: {score}%</div>
-                  <Progress value={score} className="h-2" />
-                </div>
-              </div>
-
-              {!isPendingAuction && (
-                <div className="rounded-md border border-yellow-200 bg-yellow-50 text-yellow-900 text-sm p-3">
-                  Proces weryfikacji tego zgłoszenia został zakończony. Możesz dodawać komentarze, ale głosowanie jest
-                  wyłączone.
-                </div>
-              )}
-
-              {/* Note: Auction voting temporarily disabled - not available in current API */}
-              <div className="rounded-md border border-blue-200 bg-blue-50 text-blue-900 text-sm p-3">
-                Głosowanie na aukcje jest obecnie niedostępne. Możesz jednak głosować na opinie ekspertów poniżej.
-              </div>
-
-              {/* Disabled voting UI - kept for future implementation
-              <div className="grid grid-cols-2 gap-4 text-center">
-                <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Autentyk</p>
-                  <p className="text-2xl font-bold text-green-600">{votesAuthentic}</p>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-3 w-full"
-                    disabled
-                  >
-                    <ThumbsUp className="mr-2 h-4 w-4" /> Głosuj
-                  </Button>
-                </div>
-                <div className="border rounded-lg p-4">
-                  <p className="text-sm text-muted-foreground">Falsyfikat</p>
-                  <p className="text-2xl font-bold text-red-600">{votesFake}</p>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    className="mt-3 w-full"
-                    disabled
-                  >
-                    <ThumbsDown className="mr-2 h-4 w-4" /> Zgłoś
-                  </Button>
-                </div>
-              </div>
-              */}
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
@@ -669,7 +630,16 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                   <span>Pewność oceny</span>
                   <span className="font-medium">{score}%</span>
                 </div>
-                <Progress value={score} className="h-2" />
+                <Progress
+                  value={100}
+                  className="h-2 bg-muted"
+                  style={
+                    {
+                      '--primary':
+                        score >= 80 ? '142.1 76.2% 36.3%' : score >= 50 ? '45.4 93.4% 47.5%' : '0 84.2% 60.2%',
+                    } as React.CSSProperties
+                  }
+                />
               </div>
 
               {auction.ai_uncertainty_message && (

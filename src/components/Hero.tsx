@@ -3,12 +3,19 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Hero() {
   const [url, setUrl] = useState('');
   const navigate = useNavigate();
+  const { user, isLoading } = useAuth();
+  const isAnalyzeDisabled = isLoading || !user;
 
   const handleAnalyze = () => {
+    if (isAnalyzeDisabled) {
+      return;
+    }
+
     if (url.trim()) {
       navigate(`/add-auction?url=${encodeURIComponent(url)}`);
     }
@@ -31,9 +38,6 @@ export function Hero() {
       </div>
 
       <div className="flex flex-col items-center justify-center px-4 py-24 text-center md:py-32 relative z-10">
-        <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 border-transparent bg-primary/10 text-primary hover:bg-primary/20 mb-8">
-          Nowość: Weryfikacja AI
-        </div>
         <h1 className="text-4xl font-extrabold tracking-tight lg:text-6xl mb-6 bg-clip-text text-transparent bg-gradient-to-b from-foreground to-foreground/70">
           Sprawdź autentyczność{' '}
           <span className="text-primary bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-600">
@@ -59,10 +63,12 @@ export function Hero() {
             size="lg"
             className="px-8 h-12 rounded-lg text-base shadow-md transition-transform active:scale-95 bg-gradient-to-r from-primary to-purple-600 hover:from-primary/90 hover:to-purple-600/90"
             onClick={handleAnalyze}
+            disabled={isAnalyzeDisabled}
           >
             Analizuj
           </Button>
         </div>
+        {!user && !isLoading && <p className="mt-3 text-sm text-muted-foreground">Zaloguj sie, aby uzyc analizy.</p>}
 
         <div className="mt-12 flex flex-wrap justify-center gap-x-8 gap-y-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-2">

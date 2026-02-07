@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ShieldCheck, LogOut } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { Button } from './ui/button';
 import { Avatar, AvatarFallback } from './ui/avatar';
 import {
@@ -29,23 +29,15 @@ export function Navbar() {
       <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 flex h-16 items-center justify-between">
         <div className="flex items-center gap-2">
           <Link to="/" className="flex items-center gap-2 group">
-            <div className="bg-primary/10 p-1.5 rounded-lg group-hover:bg-primary/20 transition-colors">
-              <ShieldCheck className="h-5 w-5 text-primary" />
-            </div>
-            <span className="text-xl font-bold tracking-tight bg-clip-text text-transparent bg-linear-to-r from-foreground to-foreground/80">
-              AntiqueVerify
-            </span>
-            <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold text-primary uppercase tracking-wider">
-              Beta
-            </span>
+            <img src="/logo.png" alt="AntiqueVerify" className="h-8 w-8" />
           </Link>
         </div>
         <div className="flex items-center gap-1 md:gap-2">
           <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
-            <Link to="/dashboard">Panel (Demo)</Link>
+            <Link to="/dashboard">Panel użytkownika</Link>
           </Button>
-          <Button variant="ghost" size="sm" className="hidden md:inline-flex">
-            O projekcie
+          <Button variant="ghost" size="sm" asChild className="hidden md:inline-flex">
+            <Link to="/o-projekcie">O projekcie</Link>
           </Button>
           <div className="ml-2">
             {isLoading ? (

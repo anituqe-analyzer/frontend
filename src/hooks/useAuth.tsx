@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, clearStoredToken, getStoredToken, storeToken, type LoginPayload, type User } from '@/services/api';
 
 interface AuthContextValue {
@@ -24,68 +25,82 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(() => getStoredToken());
   const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [requestedPath, setRequestedPath] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!token) {
-      setUser(null);
-      setIsLoading(false);
+  const currentUserQuery = useQuery({
+    queryKey: ['currentUser', token],
+    queryFn: () => api.getCurrentUser(token),
+    enabled: Boolean(token),
+    retry: 1,
+  });
 
-      return;
-    }
-
-    let isMounted = true;
-    setIsLoading(true);
-
-    api
-      .getCurrentUser(token)
-      .then((data) => {
-        if (!isMounted) return;
-        setUser(data);
-      })
-      .catch((err: unknown) => {
-        if (!isMounted) return;
-        setError(err instanceof Error ? err.message : 'Nie udało się pobrać danych użytkownika');
-        clearStoredToken();
-        setToken(null);
-        setUser(null);
-      })
-      .finally(() => {
-        if (!isMounted) return;
-        setIsLoading(false);
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, [token]);
-
-  const login = useCallback(async (payload: LoginPayload) => {
-    setIsAuthenticating(true);
-    setError(null);
-
-    try {
-      const { token, user: authenticatedUser } = await api.login(payload);
-      storeToken(token);
-      setToken(token);
-      const resolvedUser = authenticatedUser ?? (await api.getCurrentUser(token));
-      setUser(resolvedUser);
+  const loginMutation = useMutation({
+    mutationFn: (payload: LoginPayload) => api.login(payload),
+    onMutate: () => {
+      setError(null);
+    },
+    onSuccess: async (data) => {
+      storeToken(data.token);
+      setToken(data.token);
       setAuthModalOpen(false);
       setRequestedPath(null);
-    } catch (err) {
+
+      if (data.user) {
+        queryClient.setQueryData(['currentUser', data.token], data.user);
+        setUser(data.user);
+      } else {
+        const fetchedUser = await queryClient.fetchQuery({
+          queryKey: ['currentUser', data.token],
+          queryFn: () => api.getCurrentUser(data.token),
+        });
+        setUser(fetchedUser);
+      }
+    },
+    onError: (err: unknown) => {
       const message = err instanceof Error ? err.message : 'Nie udało się zalogować';
       setError(message);
       clearStoredToken();
       setToken(null);
       setUser(null);
-      throw err;
-    } finally {
-      setIsAuthenticating(false);
+    },
+  });
+
+  useEffect(() => {
+    if (!token) {
+      setUser(null);
+      setIsLoading(false);
+      return;
     }
-  }, []);
+
+    setIsLoading(currentUserQuery.isLoading);
+
+    if (currentUserQuery.data) {
+      setUser(currentUserQuery.data);
+      setIsLoading(false);
+    }
+
+    if (currentUserQuery.error) {
+      const message =
+        currentUserQuery.error instanceof Error
+          ? currentUserQuery.error.message
+          : 'Nie udało się pobrać danych użytkownika';
+      setError(message);
+      clearStoredToken();
+      setToken(null);
+      setUser(null);
+      setIsLoading(false);
+    }
+  }, [token, currentUserQuery.data, currentUserQuery.error, currentUserQuery.isLoading]);
+
+  const login = useCallback(
+    async (payload: LoginPayload) => {
+      await loginMutation.mutateAsync(payload);
+    },
+    [loginMutation]
+  );
 
   const logout = useCallback(() => {
     clearStoredToken();
@@ -94,7 +109,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
     setAuthModalOpen(false);
     setRequestedPath(null);
-  }, []);
+    queryClient.removeQueries({ queryKey: ['currentUser'] });
+  }, [queryClient]);
 
   const openAuthModal = useCallback(() => {
     setAuthModalOpen(true);
@@ -120,7 +136,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isLoading,
-      isAuthenticating,
+      isAuthenticating: loginMutation.isPending,
       error,
       login,
       logout,
@@ -135,7 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isLoading,
-      isAuthenticating,
+      loginMutation.isPending,
       error,
       login,
       logout,
