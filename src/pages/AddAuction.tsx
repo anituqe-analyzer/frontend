@@ -204,46 +204,6 @@ export function AddAuction() {
               </p>
             </div>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-background px-2 text-muted-foreground">lub</span>
-              </div>
-            </div>
-
-            <div className="grid gap-2">
-              <Label htmlFor="images">Upload zdjęć do oceny AI</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="images"
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleImageUpload}
-                  className="cursor-pointer"
-                />
-                <Button
-                  variant="secondary"
-                  onClick={handleEvaluateImages}
-                  disabled={isEvaluatingAI || uploadedImages.length === 0 || !formData.title}
-                >
-                  {isEvaluatingAI ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  Oceń AI
-                </Button>
-              </div>
-              {uploadedImages.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  Wybrano {uploadedImages.length} {uploadedImages.length === 1 ? 'zdjęcie' : 'zdjęć'}
-                </p>
-              )}
-            </div>
-
             {aiResult && (
               <Card className="border-2">
                 <CardHeader className="pb-3">
