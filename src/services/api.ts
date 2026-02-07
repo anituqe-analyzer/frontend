@@ -1,6 +1,6 @@
 import { getAuthToken, setAuthToken, clearAuthToken, getAuthHeaders, getAuthHeadersWithContentType } from './authToken';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 // const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL ?? 'https://hatamo-antiqueauthbackend.hf.space').replace(
 //   /\/$/,
 //   ''
@@ -218,7 +218,7 @@ export interface OpinionAuction {
   title: string;
 }
 
-export type OpinionVerdict = 'authentic' | 'fake' | 'uncertain';
+export type OpinionVerdict = 'authentic' | 'fake' | 'unsure';
 
 export type UserRole = 'user' | 'expert' | 'admin';
 
@@ -264,7 +264,7 @@ export interface VoteResponse {
 }
 
 export interface OpinionVotePayload {
-  vote_type: 'upvote' | 'downvote';
+  vote_type: -1 | 1;
 }
 
 export async function login(payload: LoginPayload) {
@@ -413,7 +413,7 @@ export async function getAuctionOpinions(auctionId: number) {
   return [];
 }
 
-export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'uncertain') {
+export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'unsure') {
   const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/opinions`, {
     method: 'POST',
     headers: getAuthHeadersWithContentType(),
@@ -668,8 +668,8 @@ export async function predictAuctionAuthenticityEnsemble(
  *
  * MOCK: Backend AI obecnie niedostępny - zwraca przykładowe dane
  */
-export async function validateAuctionFromUrl(payload: AIValidateUrlPayload): Promise<AIValidateUrlResponse> {
-  // MOCK: Symulacja opóźnienia API (scraping + analiza)
+ export async function validateAuctionFromUrl(payload: AIValidateUrlPayload): Promise<AIValidateUrlResponse> {
+ /* // MOCK: Symulacja opóźnienia API (scraping + analiza)
   await new Promise((resolve) => setTimeout(resolve, 3000));
 
   // MOCK: Wykrycie platformy z URL
@@ -726,26 +726,26 @@ export async function validateAuctionFromUrl(payload: AIValidateUrlPayload): Pro
     confidence: maxProb,
     margin: margin,
   };
-
+ */
   // PRAWDZIWE WYWOŁANIE API (wyłączone)
-  // const formData = new FormData();
-  // formData.append('url', payload.url);
-  //
-  // if (payload.max_images !== undefined) {
-  //   formData.append('max_images', payload.max_images.toString());
-  // }
-  //
-  // const response = await fetch(`${AI_API_BASE_URL}/validate_url`, {
-  //   method: 'POST',
-  //   body: formData,
-  // });
-  //
-  // if (!response.ok) {
-  //   const error = await response.json().catch(() => ({}));
-  //   throw new ApiError(error.error || 'URL validation failed', response.status, error);
-  // }
-  //
-  // return response.json() as Promise<AIValidateUrlResponse>;
+   /* const formData = new FormData();
+   formData.append('url', payload.url);
+  
+   if (payload.max_images !== undefined) {
+     formData.append('max_images', payload.max_images.toString());
+   }
+   */
+   const response = await fetch(`${API_BASE_URL}/validate_url?auction_url=${payload.url}`, {
+     method: 'GET',
+     headers: getAuthHeaders(),
+   });
+  
+   if (!response.ok) {
+     const error = await response.json().catch(() => ({}));
+     throw new ApiError(error.error || 'URL validation failed', response.status, error);
+   }
+  
+ return response.json() as Promise<AIValidateUrlResponse>;
 }
 
 /**
