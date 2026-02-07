@@ -54,7 +54,7 @@ export function useCreateOpinion() {
     }: {
       auctionId: number;
       content: string;
-      verdict?: 'authentic' | 'fake' | 'uncertain';
+      verdict?: 'authentic' | 'fake' | 'unsure';
     }) => api.createOpinion(auctionId, content, verdict),
     onSuccess: (_, variables) => {
       // Invalidate opinions for this auction

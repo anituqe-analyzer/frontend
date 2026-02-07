@@ -170,7 +170,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     }
 
     createOpinionMutation.mutate(
-      { auctionId: auction.id, content: newComment.trim(), verdict: 'uncertain' },
+      { auctionId: auction.id, content: newComment.trim(), verdict: 'unsure' },
       {
         onSuccess: () => {
           setNewComment('');
@@ -212,7 +212,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     voteOpinionMutation.mutate(
       {
         opinionId,
-        payload: { vote_type: direction === 'up' ? 'upvote' : 'downvote' },
+        payload: { vote_type: direction === 'up' ? 1 : -1 },
         auctionId: auction.id,
       },
       {

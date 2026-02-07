@@ -1,6 +1,6 @@
 import { getAuthToken, setAuthToken, clearAuthToken, getAuthHeaders, getAuthHeadersWithContentType } from './authToken';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api/v1').replace(/\/$/, '');
 // const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL ?? 'https://hatamo-antiqueauthbackend.hf.space').replace(
 //   /\/$/,
 //   ''
@@ -218,7 +218,7 @@ export interface OpinionAuction {
   title: string;
 }
 
-export type OpinionVerdict = 'authentic' | 'fake' | 'uncertain';
+export type OpinionVerdict = 'authentic' | 'fake' | 'unsure';
 
 export type UserRole = 'user' | 'expert' | 'admin';
 
@@ -264,7 +264,7 @@ export interface VoteResponse {
 }
 
 export interface OpinionVotePayload {
-  vote_type: 'upvote' | 'downvote';
+  vote_type: -1 | 1;
 }
 
 export async function login(payload: LoginPayload) {
@@ -413,7 +413,7 @@ export async function getAuctionOpinions(auctionId: number) {
   return [];
 }
 
-export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'uncertain') {
+export async function createOpinion(auctionId: number, content: string, verdict: OpinionVerdict = 'unsure') {
   const response = await fetch(`${API_BASE_URL}/auctions/${auctionId}/opinions`, {
     method: 'POST',
     headers: getAuthHeadersWithContentType(),
