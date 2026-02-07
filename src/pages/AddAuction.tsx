@@ -10,12 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Search, Plus, Loader2, ArrowLeft, Sparkles, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import { useCategories, useCreateAuction } from '@/hooks/useApiQueries';
-import {
-  validateAuctionFromUrl,
-  predictAuctionAuthenticityEnsemble,
-  type AIValidateUrlResponse,
-  type AIEnsemblePredictResponse,
-} from '@/services/api';
+import { validateAuctionFromUrl, type AIValidateUrlResponse, type AIEnsemblePredictResponse } from '@/services/api';
 
 export function AddAuction() {
   const [searchParams] = useSearchParams();
@@ -26,10 +21,8 @@ export function AddAuction() {
   const createAuctionMutation = useCreateAuction();
 
   const [isScraping, setIsScraping] = useState(false);
-  const [isEvaluatingAI, setIsEvaluatingAI] = useState(false);
   const [aiResult, setAiResult] = useState<AIValidateUrlResponse | AIEnsemblePredictResponse | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [formData, setFormData] = useState({
     external_link: initialUrl,
     title: '',
@@ -41,7 +34,6 @@ export function AddAuction() {
 
   const handleScrapeData = useCallback(async (url: string) => {
     setIsScraping(true);
-    setIsEvaluatingAI(true);
     setAiError(null);
     setAiResult(null);
 
@@ -67,7 +59,6 @@ export function AddAuction() {
       setAiError(error instanceof Error ? error.message : 'Wystąpił błąd podczas scrapowania');
     } finally {
       setIsScraping(false);
-      setIsEvaluatingAI(false);
     }
   }, []);
 
@@ -86,45 +77,6 @@ export function AddAuction() {
   const handleManualScrape = () => {
     if (formData.external_link) {
       handleScrapeData(formData.external_link);
-    }
-  };
-
-  const handleImageUpload = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = event.target.files;
-    if (files) {
-      setUploadedImages(Array.from(files));
-      setAiResult(null);
-      setAiError(null);
-    }
-  };
-
-  const handleEvaluateImages = async () => {
-    if (uploadedImages.length === 0 || !formData.title) {
-      setAiError('Dodaj zdjęcia i wypełnij tytuł przed oceną');
-      return;
-    }
-
-    setIsEvaluatingAI(true);
-    setAiError(null);
-    setAiResult(null);
-
-    try {
-      const result = await predictAuctionAuthenticityEnsemble({
-        images: uploadedImages,
-        title: formData.title,
-        description: formData.description_text || '',
-      });
-
-      if (result.status === 'success') {
-        setAiResult(result);
-      } else {
-        setAiError(result.error || 'Nie udało się ocenić aukcji');
-      }
-    } catch (error) {
-      console.error('Error evaluating images:', error);
-      setAiError(error instanceof Error ? error.message : 'Wystąpił błąd podczas oceny');
-    } finally {
-      setIsEvaluatingAI(false);
     }
   };
 
