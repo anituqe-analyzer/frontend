@@ -17,7 +17,6 @@ import {
   useAuctionOpinions,
   useCreateOpinion,
   useValidateAuctionFromUrl,
-  useVoteAuction,
   useVoteOpinion,
 } from '@/hooks/useApiQueries';
 import {
@@ -49,8 +48,6 @@ const FALLBACK_GALLERY = [
   'https://images.unsplash.com/photo-1589118949245-7d38baf380d6?w=800&auto=format&fit=crop&q=60',
   'https://images.unsplash.com/photo-1615655406736-b37c4fabf923?w=800&auto=format&fit=crop&q=60',
 ];
-
-const PENDING_STATUSES = new Set(['pending', 'pending_ai', 'needs_human_verification', 'disputed']);
 
 function PageSkeleton() {
   return (
@@ -103,7 +100,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const [commentError, setCommentError] = useState<string | null>(null);
   const [isReevaluating, setIsReevaluating] = useState(false);
   const [reevaluationError, setReevaluationError] = useState<string | null>(null);
-  const [votingState, setVotingState] = useState<'authentic' | 'fake' | null>(null);
   const [opinionVoteState, setOpinionVoteState] = useState<Record<number, 'up' | 'down' | null>>({});
   const [opinionVoteError, setOpinionVoteError] = useState<string | null>(null);
 
@@ -112,7 +108,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const { data: opinions = [], isLoading: opinionsLoading } = useAuctionOpinions(auctionId);
   const createOpinionMutation = useCreateOpinion();
   const validateUrlMutation = useValidateAuctionFromUrl();
-  const voteAuctionMutation = useVoteAuction();
   const voteOpinionMutation = useVoteOpinion();
   const queryClient = useQueryClient();
 
@@ -126,9 +121,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
 
   const images = buildGallery(auction.image, auction.image_gallery);
   const score = auction.ai_score_authenticity ? Math.round(auction.ai_score_authenticity * 100) : 0;
-  const votesAuthentic = auction.votes_authentic ?? 0;
-  const votesFake = auction.votes_fake ?? 0;
-  const netVotes = typeof auction.votes === 'number' ? auction.votes : votesAuthentic - votesFake;
   const timeLeft = auction.timeLeft ?? 'Brak danych';
   const priceCurrency = auction.currency ?? 'PLN';
   const numericPrice = typeof auction.price === 'number' ? auction.price : null;
@@ -164,8 +156,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     ? 'Brak danych'
     : createdDate.toLocaleString('pl-PL');
   const commentAvatarLabel = (user?.username ?? user?.email ?? 'TY').substring(0, 2).toUpperCase();
-  const isPendingAuction = PENDING_STATUSES.has(auction.verification_status ?? 'pending');
-
   const handleAddComment = () => {
     if (!newComment.trim()) return;
 
@@ -184,22 +174,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
         },
         onError: (error) => {
           setCommentError(error instanceof Error ? error.message : 'Nie udało się dodać komentarza');
-        },
-      }
-    );
-  };
-
-  const handleVote = (type: 'authentic' | 'fake') => {
-    if (!user || !token || votingState === type || !isPendingAuction) return;
-
-    voteAuctionMutation.mutate(
-      { auctionId: auction.id, voteType: type },
-      {
-        onSuccess: () => {
-          setVotingState(type);
-        },
-        onError: (error) => {
-          console.error('Failed to vote', error);
         },
       }
     );
