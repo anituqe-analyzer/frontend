@@ -4,25 +4,20 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Progress } from '@/components/ui/progress';
 import { ImageMagnifier } from '@/components/ui/image-magnifier';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { useQueryClient } from '@tanstack/react-query';
 import {
   useAuctionById,
   useAuctionOpinions,
   useCreateOpinion,
-  useValidateAuctionFromUrl,
   useVoteOpinion,
 } from '@/hooks/useApiQueries';
 import {
   ArrowLeft,
-  CheckCircle2,
-  ShieldAlert,
   ShieldQuestion,
   Calendar,
   ExternalLink,
@@ -30,7 +25,6 @@ import {
   ChevronLeft,
   ChevronRight,
   X,
-  Clock,
   ThumbsUp,
   ThumbsDown,
   MessageSquare,
@@ -39,8 +33,6 @@ import {
   ShieldCheck,
   Globe,
   Tag,
-  Sparkles,
-  RefreshCw,
 } from 'lucide-react';
 
 const FALLBACK_GALLERY = [
@@ -98,8 +90,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const [newComment, setNewComment] = useState('');
   const [newVerdict, setNewVerdict] = useState<'authentic' | 'fake' | 'unsure'>('unsure');
   const [commentError, setCommentError] = useState<string | null>(null);
-  const [isReevaluating, setIsReevaluating] = useState(false);
-  const [reevaluationError, setReevaluationError] = useState<string | null>(null);
   const [opinionVoteState, setOpinionVoteState] = useState<Record<number, 'up' | 'down' | null>>({});
   const [opinionVoteError, setOpinionVoteError] = useState<string | null>(null);
 
@@ -118,8 +108,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   }
 
   const images = buildGallery(auction.image, auction.image_gallery);
-  const score = auction.ai_score_authenticity ? Math.round(auction.ai_score_authenticity * 100) : 0;
-  const timeLeft = auction.timeLeft ?? 'Brak danych';
   const priceCurrency = auction.currency ?? 'PLN';
   const numericPrice = typeof auction.price === 'number' ? auction.price : null;
   let formattedPrice: string | null = null;

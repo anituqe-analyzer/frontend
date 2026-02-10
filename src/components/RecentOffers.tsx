@@ -226,7 +226,6 @@ function AuctionsBoard({ auctions, loading }: { auctions: Auction[]; loading: bo
     );
   }
 
-  const pendingAuctions = auctions.filter((offer) => PENDING_STATUSES.has(offer.verification_status ?? 'pending'));
   const finalizedAuctions = auctions.filter((offer) => !PENDING_STATUSES.has(offer.verification_status ?? 'pending'));
 
   return (
