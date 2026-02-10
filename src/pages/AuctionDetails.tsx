@@ -107,9 +107,7 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const { data: auction, isLoading: auctionLoading, error: auctionError } = useAuctionById(auctionId);
   const { data: opinions = [], isLoading: opinionsLoading } = useAuctionOpinions(auctionId);
   const createOpinionMutation = useCreateOpinion();
-  const validateUrlMutation = useValidateAuctionFromUrl();
   const voteOpinionMutation = useVoteOpinion();
-  const queryClient = useQueryClient();
 
   if (auctionLoading || opinionsLoading) {
     return <PageSkeleton />;
@@ -206,32 +204,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     );
   };
 
-  const handleReevaluateAI = async () => {
-    if (!auction.external_link) {
-      setReevaluationError('Brak linku do aukcji - nie można wykonać ponownej oceny');
-      return;
-    }
-
-    setIsReevaluating(true);
-    setReevaluationError(null);
-
-    try {
-      const result = await validateUrlMutation.mutateAsync({ url: auction.external_link, max_images: 5 });
-
-      if (result.status === 'success') {
-        await queryClient.invalidateQueries({ queryKey: ['auction', auction.id] });
-        await queryClient.invalidateQueries({ queryKey: ['auctions'] });
-      } else {
-        setReevaluationError(result.error || 'Nie udało się wykonać ponownej oceny');
-      }
-    } catch (error) {
-      console.error('Error reevaluating auction:', error);
-      setReevaluationError(error instanceof Error ? error.message : 'Wystąpił błąd');
-    } finally {
-      setIsReevaluating(false);
-    }
-  };
-
   return (
     <div className="w-full max-w-[1600px] mx-auto px-4 md:px-8 py-8 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 mb-8">
@@ -263,9 +235,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" /> Dodano: {new Date(auction.created_at).toLocaleDateString()}
-              </span>
-              <span className="flex items-center gap-1">
-                <Clock className="h-4 w-4" /> Koniec za: {timeLeft}
               </span>
               {auction.external_link && (
                 <a
@@ -549,92 +518,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
               <p className="text-sm text-muted-foreground">
                 {formattedPrice ? `Waluta źródła: ${priceCurrency}` : 'Sprzedający nie podał kwoty początkowej'}
               </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  Analiza AI
-                </span>
-                {auction.external_link && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleReevaluateAI}
-                    disabled={isReevaluating}
-                    className="h-8 px-2"
-                  >
-                    {isReevaluating ? (
-                      <>
-                        <RefreshCw className="h-3 w-3 mr-1 animate-spin" />
-                        <span className="text-xs">Ocenianie...</span>
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="h-3 w-3 mr-1" />
-                        <span className="text-xs">Przeocen</span>
-                      </>
-                    )}
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center gap-3">
-                <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
-                  {score >= 80 ? (
-                    <CheckCircle2 className="h-6 w-6 text-green-500" />
-                  ) : score >= 50 ? (
-                    <ShieldQuestion className="h-6 w-6 text-yellow-500" />
-                  ) : (
-                    <ShieldAlert className="h-6 w-6 text-red-500" />
-                  )}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm text-muted-foreground">Wskaźnik autentyczności</p>
-                  <p className="text-2xl font-bold">{score}%</p>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Pewność oceny</span>
-                  <span className="font-medium">{score}%</span>
-                </div>
-                <Progress
-                  value={100}
-                  className="h-2 bg-muted"
-                  style={
-                    {
-                      '--primary':
-                        score >= 80 ? '142.1 76.2% 36.3%' : score >= 50 ? '45.4 93.4% 47.5%' : '0 84.2% 60.2%',
-                    } as React.CSSProperties
-                  }
-                />
-              </div>
-
-              {auction.ai_uncertainty_message && (
-                <div className="rounded-md border bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    <strong>Uwaga AI:</strong> {auction.ai_uncertainty_message}
-                  </p>
-                </div>
-              )}
-
-              {reevaluationError && (
-                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3">
-                  <p className="text-xs text-destructive">{reevaluationError}</p>
-                </div>
-              )}
-
-              <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
-                <p>• Analiza oparta na obrazach i opisie</p>
-                <p>• Model AI przeszkolony na aukcjach antyków</p>
-                <p>• Wyniki mają charakter pomocniczy</p>
-              </div>
             </CardContent>
           </Card>
 

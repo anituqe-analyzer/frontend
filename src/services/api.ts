@@ -1,10 +1,6 @@
 import { getAuthToken, setAuthToken, clearAuthToken, getAuthHeaders, getAuthHeadersWithContentType } from './authToken';
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'http://localhost:3000/api/v1').replace(/\/$/, '');
-// const AI_API_BASE_URL = (import.meta.env.VITE_AI_API_URL ?? 'https://hatamo-antiqueauthbackend.hf.space').replace(
-//   /\/$/,
-//   ''
-// );
+const API_BASE_URL = (import.meta.env.VITE_API_URL ?? 'https://kantown-anituqe-analyzer.hf.space/api/v1').replace(/\/$/, '');
 
 export class ApiError extends Error {
   status: number;

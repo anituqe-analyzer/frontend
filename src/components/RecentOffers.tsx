@@ -232,12 +232,6 @@ function AuctionsBoard({ auctions, loading }: { auctions: Auction[]; loading: bo
   return (
     <div className="space-y-12">
       <AuctionSection
-        title="Aukcje oczekujące na werdykt"
-        description="Możesz głosować i komentować, aby wesprzeć proces weryfikacji."
-        auctions={pendingAuctions}
-        emptyMessage="Brak aktywnych zgłoszeń w tej kategorii."
-      />
-      <AuctionSection
         title="Aukcje z zakończoną weryfikacją"
         description="Głosowanie zostało zamknięte. Pozostaw komentarz, jeśli chcesz podzielić się opinią."
         auctions={finalizedAuctions}

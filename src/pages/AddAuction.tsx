@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useValidateAuctionFromUrl } from '@/hooks/useApiQueries';
@@ -8,18 +8,18 @@ export function AddAuction() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const validateUrlMutation = useValidateAuctionFromUrl();
+  const lastValidatedUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     const url = searchParams.get('url');
     if (!url) return;
 
-    let isActive = true;
+    if (lastValidatedUrlRef.current === url) return;
+    lastValidatedUrlRef.current = url;
 
     validateUrlMutation
       .mutateAsync({ url, max_images: 5 })
       .then((result) => {
-        if (!isActive) return;
-
         const response = result as AIValidateUrlResponse & {
           validation_result?: { auction?: { id?: number } };
           auction_id?: number;
@@ -32,13 +32,8 @@ export function AddAuction() {
         }
       })
       .catch((error) => {
-        if (!isActive) return;
         console.error('Error validating auction URL:', error);
       });
-
-    return () => {
-      isActive = false;
-    };
   }, [navigate, searchParams, validateUrlMutation]);
 
   return (
