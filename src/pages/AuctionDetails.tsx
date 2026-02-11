@@ -144,7 +144,6 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
   const verificationStatus = auction.verification_status ?? 'pending';
   const verifiedStatuses = new Set(['expert_verified', 'ai_verified', 'ai_verified_authentic', 'community_verified']);
   const fakeStatuses = new Set(['fake', 'ai_verified_fake', 'rejected']);
-  const pendingStatuses = new Set(['pending', 'pending_ai', 'needs_human_verification', 'disputed']);
   const isVerified = verifiedStatuses.has(verificationStatus);
   const isFake = fakeStatuses.has(verificationStatus);
   const votesAuthentic = auction.votes_authentic ?? null;
