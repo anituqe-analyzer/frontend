@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,15 +7,11 @@ import { Separator } from '@/components/ui/separator';
 import { ImageMagnifier } from '@/components/ui/image-magnifier';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import {
-  useAuctionById,
-  useAuctionOpinions,
-  useCreateOpinion,
-  useVoteOpinion,
-} from '@/hooks/useApiQueries';
+import { useAuctionById, useAuctionOpinions, useCreateOpinion, useVoteOpinion } from '@/hooks/useApiQueries';
 import {
   ArrowLeft,
   ShieldQuestion,
@@ -31,6 +27,7 @@ import {
   Send,
   User,
   ShieldCheck,
+  ShieldAlert,
   Globe,
   Tag,
 } from 'lucide-react';
@@ -142,6 +139,17 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
     ? 'Brak danych'
     : createdDate.toLocaleString('pl-PL');
   const commentAvatarLabel = (user?.username ?? user?.email ?? 'TY').substring(0, 2).toUpperCase();
+  const aiScore = typeof auction.ai_score_authenticity === 'number' ? auction.ai_score_authenticity : null;
+  const aiScorePercent = aiScore !== null ? Math.round(aiScore * 100) : null;
+  const verificationStatus = auction.verification_status ?? 'pending';
+  const verifiedStatuses = new Set(['expert_verified', 'ai_verified', 'ai_verified_authentic', 'community_verified']);
+  const fakeStatuses = new Set(['fake', 'ai_verified_fake', 'rejected']);
+  const pendingStatuses = new Set(['pending', 'pending_ai', 'needs_human_verification', 'disputed']);
+  const isVerified = verifiedStatuses.has(verificationStatus);
+  const isFake = fakeStatuses.has(verificationStatus);
+  const votesAuthentic = auction.votes_authentic ?? null;
+  const votesFake = auction.votes_fake ?? null;
+  const netVotes = votesAuthentic !== null || votesFake !== null ? (votesAuthentic ?? 0) - (votesFake ?? 0) : null;
   const handleAddComment = () => {
     if (!newComment.trim()) return;
 
@@ -219,6 +227,23 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
                   <Globe className="h-3 w-3" /> {platformLabel}
                 </Badge>
               )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 mb-3 text-xs text-muted-foreground">
+              {isVerified ? (
+                <Badge className="bg-green-500/90 text-white">
+                  <ShieldCheck className="mr-1 h-3 w-3" /> Autentyk
+                </Badge>
+              ) : isFake ? (
+                <Badge variant="destructive">
+                  <ShieldAlert className="mr-1 h-3 w-3" /> Falsyfikat
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                  <ShieldQuestion className="mr-1 h-3 w-3" /> Weryfikacja
+                </Badge>
+              )}
+              <span className="text-xs">AI: {aiScorePercent === null ? 'brak danych' : `${aiScorePercent}%`}</span>
+              {netVotes !== null && <span className="text-xs">Bilans: {netVotes > 0 ? `+${netVotes}` : netVotes}</span>}
             </div>
             <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
@@ -506,6 +531,67 @@ function AuctionDetailsContent({ auctionId }: { auctionId: number }) {
               <p className="text-sm text-muted-foreground">
                 {formattedPrice ? `Waluta źródła: ${priceCurrency}` : 'Sprzedający nie podał kwoty początkowej'}
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Autentyczność</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex items-center gap-2">
+                {isVerified ? (
+                  <Badge className="bg-green-500/90 text-white">
+                    <ShieldCheck className="mr-1 h-3 w-3" /> Autentyk
+                  </Badge>
+                ) : isFake ? (
+                  <Badge variant="destructive">
+                    <ShieldAlert className="mr-1 h-3 w-3" /> Falsyfikat
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                    <ShieldQuestion className="mr-1 h-3 w-3" /> Weryfikacja
+                  </Badge>
+                )}
+              </div>
+
+              {aiScorePercent === null ? (
+                <p className="text-sm text-muted-foreground">Brak wyniku analizy AI.</p>
+              ) : (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Ocena AI</span>
+                    <span
+                      className={`font-semibold ${
+                        aiScorePercent >= 80
+                          ? 'text-green-600'
+                          : aiScorePercent >= 50
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
+                      }`}
+                    >
+                      {aiScorePercent}%
+                    </span>
+                  </div>
+                  <Progress
+                    value={aiScorePercent}
+                    className="h-2 bg-muted"
+                    style={
+                      {
+                        '--primary':
+                          aiScorePercent >= 80
+                            ? '142.1 76.2% 36.3%'
+                            : aiScorePercent >= 50
+                              ? '45.4 93.4% 47.5%'
+                              : '0 84.2% 60.2%',
+                      } as CSSProperties
+                    }
+                  />
+                  {auction.ai_uncertainty_message && (
+                    <p className="text-xs text-muted-foreground">{auction.ai_uncertainty_message}</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
